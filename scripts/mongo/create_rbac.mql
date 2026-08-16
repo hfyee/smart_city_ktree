@@ -1,0 +1,29 @@
+// RBAC in admin db (not the application db)
+// Enable authorization in /etc/mongod.conf
+
+use admin
+
+// db.getUsers()
+// db.dropUser('user1')
+
+// Create db user with roles
+db.createUser({
+  user: "hfyee",
+  pwd: "9108122d",
+  roles: [ { role: "dbOwner", db: "smartcity" } ]
+})
+
+db.createUser({
+  user: "tsteo",
+  pwd: "3897044t",
+  roles: [ { role: "readWrite", db: "smartcity" } ]
+})
+
+db.createUser({
+  user: "mkao",
+  pwd: "6667044q",
+  roles: [ { role: "readWrite", db: "smartcity" } ]
+})
+
+// By default, MongoDB authentication is disabled. 
+// Edit /etc/mongod.conf and add "authorization: enabled" under security
