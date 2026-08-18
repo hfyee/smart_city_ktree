@@ -133,6 +133,12 @@ aws ec2 describe-instances \
 ## To list the EC2 instances in your profile
 aws ec2 describe-instances --profile EDM_AWS_ROLE_01 | grep InstanceId
 
+## Also display their status and public IP address
+aws ec2 describe-instances --region ap-southeast-1 \
+    --query "Reservations[*].Instances[*].{ID:InstanceId,Status:State.Name,PublicIP:PublicIpAddress}" \
+    --output table \
+    --profile EDM_AWS_ROLE_01
+
 # 6. Stop / start the instance
 aws ec2 stop-instances --instance-ids i-01f9c9d74e3732bbe --profile EDM_AWS_ROLE_01
 aws ec2 start-instances --instance-ids i-01f9c9d74e3732bbe --profile EDM_AWS_ROLE_01
