@@ -5,6 +5,7 @@ aws configure list-profiles
 aws configure --profile EDM_IAM_03
 ## else if you already ran aws configure before
 export AWS_PROFILE=EDM_IAM_03 
+export AWS_PROFILE=EDM_AWS_ROLE_01
 aws configure # just to confirm
 
 Assume your assigned role by adding a new profile in ~/.aws/config
@@ -23,30 +24,76 @@ aws ec2 describe-vpcs --vpc-ids vpc-07d617bf1d097edcd --query 'Vpcs[0].CidrBlock
 
 (Result: 10.42.0.0/16)
 
-SG_ID=$(aws ec2 create-security-group \
-  --group-name "learner-09-cli-practical" \
-  --description "Learner 09 CLI practical" \
-  --vpc-id vpc-0ba28a3f8ae00b516 \
-  --tag-specifications "ResourceType=security-group,Tags=[{Key=LearnerId,Value=09}]" \
-  --query 'GroupId' --output text \
-  --profile learner-09)
-  
-aws ec2 authorize-security-group-ingress \
-  --group-id "$SG_ID" \
-  --ip-permissions 'IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[{CidrIp=10.42.0.0/16,Description="ICMP from within lab VPC"}]' \
-  --profile learner-09
+## Check route table associated with your subnet
+aws ec2 describe-instances \
+    --instance-ids i-01c4b47711b9b37f2 \
+    --query "Reservations[0].Instances[0].[VpcId,SubnetId,PrivateIpAddress,PublicIpAddress]" \
+    --output table \
+    --profile EDM_AWS_ROLE_01
 
-## route table associated with your subnet
-rtb-07f1ebb6afbb0661c
+aws ec2 describe-route-tables \
+    --filters Name=association.subnet-id,Values=subnet-0853cb9556de61de5 \
+    --query "RouteTables[0].RouteTableId" \
+    --output text \
+    --profile EDM_AWS_ROLE_01
+
+(result: rtb-0da87746519316583)
+
+aws ec2 describe-route-tables \
+    --route-table-ids rtb-0da87746519316583 \
+    --query "RouteTables[0].Routes[*].[DestinationCidrBlock,GatewayId,NatGatewayId,State]" \
+    --output table
+    --profile EDM_AWS_ROLE_01
+
+(Results: not authorized to perform: ec2:DescribeRouteTables)
+
+## Get the security group attached to your instance
+aws ec2 describe-instances \
+    --instance-ids i-01c4b47711b9b37f2 \
+    --query "Reservations[0].Instances[0].SecurityGroups[*].[GroupId,GroupName]" \
+    --output table \
+    --profile EDM_AWS_ROLE_01
+
+## Inspect the security group
+aws ec2 describe-security-groups \
+    --group-ids sg-0a3d787e2e1df274c  \
+    --query "SecurityGroups[0].IpPermissions" \
+    --output json \
+    --profile EDM_AWS_ROLE_01
+
+## Add an SSH inbound rule allowing only your machine
+curl https://checkip.amazonaws.com
+
+aws ec2 authorize-security-group-ingress \
+    --group-id sg-0a3d787e2e1df274c \
+    --protocol tcp \
+    --port 22 \
+    --cidr 119.234.59.9/32 \
+    --profile EDM_AWS_ROLE_01
+
+## /32 means only that one public IP address
+## verify:
+nc -vz ec2-13-212-197-148.ap-southeast-1.compute.amazonaws.com 22
 
 ## Create your own key pair
 aws ec2 create-key-pair \
-  --key-name "edm_iam_03-project" \
+  --key-name "edm_iam_03" \
   --tag-specifications "ResourceType=key-pair,Tags=[{Key=GroupTag,Value=01}]" \
   --query 'KeyMaterial' --output text \
-  --profile EDM_AWS_ROLE_01 > edm_iam_03-project.pem
+  --profile EDM_AWS_ROLE_01 > edm_iam_03.pem
 
-chmod 400 edm_iam_03-project.pem
+chmod 400 edm_iam_03.pem
+
+(Result: this pem didn't work; key pair was created at the point of EC2 creation by Mr Heng.)
+
+## Check which key pair was used
+aws ec2 describe-instances \
+    --instance-ids i-01c4b47711b9b37f2 \
+    --query "Reservations[0].Instances[0].KeyName" \
+    --output text \
+    --profile EDM_AWS_ROLE_01
+
+(Result: edm-group01-key)
 
 # 3. Find a launchable AMI
 aws ec2 describe-images \
@@ -56,6 +103,13 @@ aws ec2 describe-images \
   --profile EDM_AWS_ROLE_01
 
 (Return result: ami-0bda501dba2e3a0ba)
+
+aws ec2 describe-images \
+  --region ap-southeast-1 \
+  --image-ids ami-0bda501dba2e3a0ba \
+  --query 'Images[0].[Name,Description,PlatformDetails]' \
+  --output table \
+	--profile EDM_AWS_ROLE_01
 
 # 4. Launch an instance into your subnet
 aws ec2 run-instances \
@@ -74,7 +128,7 @@ aws ec2 run-instances \
 aws ec2 describe-instances \
   --instance-ids i-01f9c9d74e3732bbe \
   --query 'Reservations[0].Instances[0].{State:State.Name,Type:InstanceType,Subnet:SubnetId,Private:PrivateIpAddress}' \
-  --profile learner-09
+  --profile EDM_AWS_ROLE_01
 
 ## To list the EC2 instances in your profile
 aws ec2 describe-instances --profile EDM_AWS_ROLE_01 | grep InstanceId
@@ -94,5 +148,5 @@ aws ec2 describe-internet-gateways \
     --query "InternetGateways[0].InternetGatewayId" \
     --output text
 
-ssh -i edm_iam_03-project.pem ec2-user@13.250.126.59
-ssh -i edm_iam_03-project.pem ubuntu@13.250.126.59
+## big EC2 instance for pipeline
+ssh -i ./edm-group01-key.pem ec2-user@13.212.197.148
