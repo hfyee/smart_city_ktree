@@ -5,7 +5,7 @@ from unittest import result
 import json
 import pathlib
 import config
-from utils import load
+from db.utils import load
 import re
 
 import chromadb

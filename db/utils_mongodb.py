@@ -5,10 +5,9 @@ from unittest import result
 import json
 import pathlib
 import config
-from utils import load
+from db.utils import load, pseudonymise
 from db.connections import get_mongo_client
 from pymongo import ReturnDocument
-from utils import pseudonymise
  
 # ── Connect ───────────────────────────────────────────────────────────────
 client = get_mongo_client()

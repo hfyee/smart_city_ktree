@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from unittest import result
 from db.connections import get_neo4j_driver
-from utils import load, mask_name
+from db.utils import load, mask_name
 from neo4j import Driver
 import networkx as nx
 from networkx.algorithms.community import louvain_communities

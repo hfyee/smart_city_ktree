@@ -6,8 +6,8 @@ should write to more than one database.
 """
 import streamlit as st
 from unittest import result
-from utils_pipeline import create_event, delete_event, search_events
-from utils_pipeline import get_mongo_documents_count, get_vector_collections_count, get_graph_nodes_count
+from db.utils_pipeline import create_event, delete_event, search_events
+from db.utils_pipeline import get_mongo_documents_count, get_vector_collections_count, get_graph_nodes_count
 
 st.set_page_config(page_title="CityBuzz · Add Event", page_icon="➕", layout="wide")
 st.title("Pipeline")

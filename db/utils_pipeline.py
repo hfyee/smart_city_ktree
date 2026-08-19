@@ -7,7 +7,7 @@ from unittest import result
 import json
 import pathlib
 import config
-from utils import load, pseudonymise
+from db.utils import load, pseudonymise
 from db.connections import get_mongo_client
 from pymongo import ReturnDocument
 from db.connections import get_neo4j_driver
@@ -43,12 +43,12 @@ print(f"Ready. Output dimensions: {model.get_sentence_embedding_dimension()}")
 
 # Lookup dictionaries for denormalisation
 # In a production system, they would be retrieved from separate db collections
-venues = load("venues.json")
-venues.extend(load("venues_new.json"))
-organisers = load("organisers.json")
-organisers.extend(load("organisers_new.json"))
-venue_map = {v["venue_id"]: v for v in venues}
-organiser_map = {o["organiser_id"]: o for o in organisers}
+#venues = load("venues.json")
+#venues.extend(load("venues_new.json"))
+#organisers = load("organisers.json")
+#organisers.extend(load("organisers_new.json"))
+#venue_map = {v["venue_id"]: v for v in venues}
+#organiser_map = {o["organiser_id"]: o for o in organisers}
 
 def get_next_event_id() -> str:
     ...
