@@ -1,0 +1,85 @@
+"""
+This script extracts objects (JSON, CSV, or Parquet) from your S3 bucket and streams individual records into the Kafka topic.
+"""
+import json
+import os
+import boto3
+from confluent_kafka import Producer
+from dotenv import load_dotenv
+import config
+
+# Reads the key-value pairs from .env and adds them to environment variables
+load_dotenv()
+
+aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+aws_region = os.getenv("AWS_REGION", "ap-southeast-1")
+aws_s3_bucket = os.getenv("S3_BUCKET")
+
+# AWS & S3 Config
+S3_BUCKET = aws_s3_bucket
+S3_PREFIX = "raw_data/"
+s3_client = boto3.client(
+    "s3",
+    aws_access_key_id=aws_access_key,
+    aws_secret_access_key=aws_secret_access_key,
+    region_name=aws_region
+)
+
+# Kafka Producer Config
+producer_config = {
+    'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+    'client.id': 'smartcity-s3-producer',
+    'linger.ms': 10,
+    'batch.num.messages': 1000
+}
+producer = Producer(producer_config)
+
+# Map S3 prefix keywords to dedicated Kafka topics
+ROUTING_RULES = {
+    "complaints/": "smartcity-complaints",
+    "traffic/": "smartcity-traffic",
+    "weather/": "smartcity-weather"
+}
+
+def resolve_topic(s3_key: str) -> str:
+    """Determine the destination Kafka topic from the S3 file path."""
+    for prefix_key, topic_name in ROUTING_RULES.items():
+        if prefix_key in s3_key:
+            return topic_name
+    return None
+
+def delivery_report(err, msg):
+    if err is not None:
+        print(f"Delivery failed for record to {msg.topic()}: {err}")
+
+def stream_s3_to_kafka():
+    paginator = s3_client.get_paginator('list_objects_v2')
+    pages = paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_BASE_PREFIX)
+
+    for page in pages:
+        for obj in page.get('Contents', []):
+            key = obj['Key']
+            if not key.endswith('.json'):
+                continue
+
+            target_topic = resolve_topic(key)
+            if not target_topic:
+                print(f"Skipping unmapped file: {key}")
+                continue
+
+            print(f"Streaming {key} -> Topic: {target_topic}")
+            response = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+            lines = response['Body'].read().decode('utf-8').splitlines()
+
+            for line in lines:
+                if line.strip():
+                    producer.produce(
+                        topic=target_topic,
+                        value=line.encode('utf-8'),
+                        callback=delivery_report
+                    )
+            producer.flush()
+
+if __name__ == "__main__":
+    stream_s3_to_kafka()
