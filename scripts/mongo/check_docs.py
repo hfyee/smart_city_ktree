@@ -29,11 +29,40 @@ def get_last_complaint_id_wo_incr() -> str:
     return f"COMP_{seq_number:06d}"
 
 if __name__ == '__main__':
-    if True:
+    if False:
         print(f"Number of documents in complaints collection: {complaints_collection.count_documents({})}")
         print()
         print("Last document inserted:")
         cursor = complaints_collection.find({}).sort("complaint_id", DESCENDING).limit(1)
+        for document in cursor:
+            pprint(document)
+            print()
+        print()
+
+    if False:
+        station_id = "WEATHER_9"
+        print(f"Checking {station_id} data for any duplicate records")
+        # There should only one record with "duplicate_flag = YES" for the unique station_id and recorded_at combination
+        cursor = weather_collection.find({
+            "station_id": station_id,
+            "duplicate_flag": "YES" 
+        }).sort({"recorded_at": -1})
+        for document in cursor:
+            pprint(document)
+            print()
+        print()
+
+    if True:
+        sensor_id = "TRAFFIC_92"
+        print(f"Checking {sensor_id} data")
+        cursor = traffic_collection.find({
+            "sensor_id": sensor_id,
+            #"timestamp": {"$regex": "^2025-08-06"}
+            "timestamp": {
+                "$gte": "2025-08-06T00:00:00",
+                "$lt": "2025-08-07T00:00:00"
+            }
+        }).sort({"timestamp": -1})
         for document in cursor:
             pprint(document)
             print()
