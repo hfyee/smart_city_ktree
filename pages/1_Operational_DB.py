@@ -18,7 +18,7 @@ st.header("POLITEMall dataset")
 # ===========================================================================
 # Aggregation pipeline with $group stage
 # ===========================================================================
-st.subheader("Aggregation by complaints category")
+st.subheader("Aggregation of complaints by category")
 
 filter_priority = st.selectbox(
     "Match by priority",
