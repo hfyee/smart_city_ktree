@@ -28,6 +28,27 @@ traffic_col = db["traffic_sensors"]
 #organiser_map = {o["organiser_id"]: o for o in organisers}
 
 # ── Read operations ───────────────────────────────────────────────────────
+def get_citizen_complaints(year: str, category: str, priority: str) -> list:
+    query = {}
+    if category:
+        query["category"] = category
+    if priority:
+        query["priority"] = priority
+    if year:
+        query["date_submitted"] = {"$regex": f"^{year}"}
+    
+    complaint_projection = {
+        "date_submitted": 1, "complaint_text": 1, "area": 1, 
+        "status":1, "contact_info": 1, "_id": 0
+    }
+    result = list(
+        complaints_col.find(query, complaint_projection)
+        .sort("date_submitted", -1)
+        .limit(500)
+    )
+
+    return result
+
 def get_days_with_this_weather(year: str, wind_speed: float, temperature: float,
                                precipitation: float, visibility: float) -> list:
     """Returns a list of weather documents matching the given filters."""
@@ -70,7 +91,6 @@ def get_traffic_on_weather_days(year: str, wind_speed: float, temperature: float
     if year:
         query["recorded_at"] = {"$regex": f"^{year}"}
     
-    # Weather query
     weather_projection = {
         "station_id": 1, "recorded_at": 1,
         "wind_speed_kmh": 1, "temperature_celsius": 1,
@@ -126,9 +146,6 @@ def get_traffic_on_weather_days(year: str, wind_speed: float, temperature: float
             merged_rows.append(row)
 
     return merged_rows
-
-def get_documents_count() -> int:
-    return db.events.count_documents({})
 
 # Recommended order: $match, $lookup, $unwind, $group
 def aggregate_citizen_complaints_by_category(filter_priority) -> list[dict]:

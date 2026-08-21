@@ -3,7 +3,7 @@
 from unittest import result
 
 import streamlit as st
-from db.utils_mongodb import get_days_with_this_weather, get_traffic_on_weather_days
+from db.utils_mongodb import get_traffic_on_weather_days, get_citizen_complaints
 from db.utils_mongodb import aggregate_citizen_complaints_by_category
 from db.utils_mongodb import get_weather_cursor
 import pandas as pd
@@ -32,6 +32,31 @@ if len(rows) > 0:
     column_order = ["category", "complaints_count", "earliest_date", "latest_date"]
     df = df[column_order]
     st.dataframe(df)
+
+st.subheader("Search citizen complaint records")
+
+ccol1, ccol2 = st.columns(2)
+with ccol1:
+    year = st.radio("Pick a year:", ["2024", "2025"], key="complaint_year_radio")
+    st.write("You selected:", year)
+with ccol2:
+    complaint_category = st.selectbox(
+        "Complaint category",
+        ["Noise", "Traffic", "Roads", "Lighting", "Trash", "Parks"],
+    )
+    complaint_priority = st.selectbox(
+        "Select the priority",
+        ["Low", "Medium", "High"],
+    )
+
+if st.button("Search", key="complaint_search_button"):
+    rows = get_citizen_complaints(year=year, category=complaint_category, priority=complaint_priority)
+    if len(rows) > 0:
+        df = pd.DataFrame(rows)
+        column_order = ["date_submitted", "area", "complaint_text", 
+                        "status", "contact_info"]
+        df = df[column_order]
+        st.dataframe(df.style.format({"contact_info": lambda val: str(val)[:12]}))
 
 st.divider()
 
@@ -79,10 +104,10 @@ st.divider()
 # ===========================================================================
 # READ — results area with at least one filter
 # ===========================================================================
-st.subheader("Search records")
+st.subheader("Search weather and traffic records")
 st.caption("Matching weather days and high-congestion traffic")
 
-year = st.radio("Pick a year:", ["2024", "2025"])
+year = st.radio("Pick a year:", ["2024", "2025"], key="weather_year_radio")
 st.write("You selected:", year)
 
 fcol1, fcol2 = st.columns(2)
@@ -93,7 +118,7 @@ with fcol2:
     precipitation = st.slider("Select precipitation (mm) >=", min_value=0, max_value=20, value=14)
     visibility = st.slider("Select visibility (km) <=", min_value=2, max_value=20, value=6)
 
-if st.button("Search"):
+if st.button("Search", key="weather_search_button"):
 #    rows = get_days_with_this_weather(year=year, wind_speed=wind_speed, temperature=temperature, 
 #                                      precipitation=precipitation, visibility=visibility)
 #    if len(rows) > 0:
@@ -113,8 +138,7 @@ if st.button("Search"):
                                       "precipitation_mm": "{:.2f}",
                                       "temperature_celsius": "{:.1f}"}))
 
-st.divider()
-
+#st.divider()
 #st.header("CRUD operations")
 #st.caption("Akan datang!")
 ## ===========================================================================
