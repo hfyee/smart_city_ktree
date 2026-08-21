@@ -8,11 +8,18 @@ import config
 from db.utils import load, pseudonymise
 from db.connections import get_mongo_client
 from pymongo import ReturnDocument
+from pymongo.cursor import Cursor
+from typing import Any
+from collections import defaultdict
+from datetime import datetime
  
 # ── Connect ───────────────────────────────────────────────────────────────
 client = get_mongo_client()
 db = client[config.MONGO_DB] if client else None
 print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
+complaints_col = db["citizen_complaints"]
+weather_col = db["weather_data"]
+traffic_col = db["traffic_sensors"]
 
 # Build lookup dictionaries for denormalisation
 #venues     = load("venues.json")
@@ -20,159 +27,159 @@ print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
 #venue_map     = {v["venue_id"]: v for v in venues}
 #organiser_map = {o["organiser_id"]: o for o in organisers}
 
-# ── CRUD operations ───────────────────────────────────────────────────────
-# Auto-increment event_id
-# Run separate script init_event_id_counter.py during setup to initialize the counter
-def get_next_event_id() -> str:
-    """Increments the counter and returns the formatted ID (e.g., 'EVT101')."""
-    counter = db.counters.find_one_and_update(
-        filter={"_id": "event_id"},
-        update={"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    
-    seq_number = counter["seq"]    
-    # Format with prefix and 3-digit padding (e.g., 101 -> 'EVT101', 9 -> 'EVT009')
-    return f"EVT{seq_number:03d}"
-
-def create_event(new_event: dict) -> str:
-    """Inserts one event document. Called from the Streamlit 'Add Event' form.""" 
-    e = {
-        "title":            new_event["title"],
-        "description":      new_event["description"],
-        "category":         new_event["category"],
-        "date":             new_event["date"],
-        "time":             new_event["time"],
-        "price":            float(new_event["price"]),
-        "available_tickets": int(new_event["available_tickets"]),
-        "tags":            new_event["tags"],
-    }
-    e["event_id"] = get_next_event_id()
-
-    v = venue_map.get(new_event["venue_id"], {})
-    venue_data = {
-        "venue_id":  v.get("venue_id"),
-        "name":      v.get("name"),
-        "address":   v.get("address"),
-        "type":      v.get("type"),
-        "neighbourhood": v.get("neighbourhood"),
-    }
-    e["venue"] = venue_data
-
-    o = organiser_map.get(new_event["organiser_id"], {})
-    organiser_data = {
-        "organiser_id": o.get("organiser_id"),
-        "name":         o.get("name"),
-        "email":        o.get("email"),
-    }
-    e["organiser"] = organiser_data
-
-    result = db.events.insert_one(e)
-    #print(f"Inserted event with ID: {e['event_id']}")
-    return str(result.inserted_id)
-
-def read_events(filter_category: str, max_price: float) -> list:
-    """Reads events with optional filters. Returns a list of event documents."""
+# ── Read operations ───────────────────────────────────────────────────────
+def get_days_with_this_weather(year: str, wind_speed: float, temperature: float,
+                               precipitation: float, visibility: float) -> list:
+    """Returns a list of weather documents matching the given filters."""
     query = {}
-    if filter_category and filter_category != "(all)":
-        query["category"] = filter_category
-    if max_price is not None:
-        query["price"] = {"$lte": max_price}
+    if wind_speed:
+        query["wind_speed_kmh"] = {"$gt": wind_speed}
+    if temperature:
+        query["temperature_celsius"] = {"$lt": temperature}
+    if precipitation:
+        query["precipitation_mm"] = {"$gt": precipitation}
+    if visibility:
+        query["visibility_km"] = {"$lt": visibility}
+    if year:
+        query["recorded_at"] = {"$regex": f"^{year}"}
     
-    events = list(db.events.find(query))
-    return events
+    result = list(
+        weather_col.find(query, {
+        "station_id": 1, "recorded_at": 1, 
+        "wind_speed_kmh": 1, "temperature_celsius": 1, 
+        "precipitation_mm": 1, "visibility_km": 1,
+        "_id": 0})
+        .sort("recorded_at", -1)
+        .limit(500)
+    )
+
+    return result
+
+def get_traffic_on_weather_days(year: str, wind_speed: float, temperature: float,
+                               precipitation: float, visibility: float) -> list:
+    """Returns a flattened row (weather, traffic) pair that matches the given filters."""
+    query = {}
+    if wind_speed:
+        query["wind_speed_kmh"] = {"$gt": wind_speed}
+    if temperature:
+        query["temperature_celsius"] = {"$lt": temperature}
+    if precipitation:
+        query["precipitation_mm"] = {"$gt": precipitation}
+    if visibility:
+        query["visibility_km"] = {"$lt": visibility}
+    if year:
+        query["recorded_at"] = {"$regex": f"^{year}"}
+    
+    # Weather query
+    weather_projection = {
+        "station_id": 1, "recorded_at": 1,
+        "wind_speed_kmh": 1, "temperature_celsius": 1,
+        "precipitation_mm": 1, "visibility_km": 1,
+        "_id": 0
+    }
+    dates_with_this_weather = list(
+        weather_col.find(query, weather_projection)
+        .sort("recorded_at", -1)
+    )
+    # Calendar dates to match traffic_col against
+    weather_dates = {
+        datetime.fromisoformat(doc["recorded_at"]).date().isoformat()
+        for doc in dates_with_this_weather
+    }
+
+    # Traffic query
+    traffic_projection = {
+        "sensor_id": 1, "timestamp": 1,
+        "congestion_level": 1, "avg_speed_kmh": 1,
+        "road_segment": 1, "weather_condition": 1,
+        "_id": 0
+    }
+    traffic_query = {
+        "$and": [
+            {"$expr": {"$in": [{"$substrCP": ["$timestamp", 0, 10]}, list(weather_dates)]}},
+            {"congestion_level": {"$in": ["High"]}},
+            {"weather_condition": {"$nin": [None, ""]}} # exclude null and empty strings
+        ]
+    }
+    traffic_results = list(
+        traffic_col.find(traffic_query, traffic_projection)
+        .sort("timestamp", -1)
+        .limit(500)
+    )
+
+    # Group traffic docs by calendar date
+    traffic_by_date = defaultdict(list)
+    for doc in traffic_results:
+        day = doc["timestamp"][:10]
+        traffic_by_date[day].append(doc)
+
+    # Flatten into one row per (weather, traffic) pair sharing a calendar day
+    merged_rows = []
+    for weather_doc in dates_with_this_weather:
+        day = datetime.fromisoformat(weather_doc["recorded_at"]).date().isoformat()
+        weather_row = {"date": day, **weather_doc}
+
+        ## inner join
+        for traffic_doc in traffic_by_date.get(day, []):
+            row = dict(weather_row)
+            row.update({f"traffic_{k}": v for k, v in traffic_doc.items() if k != "timestamp"})
+            merged_rows.append(row)
+
+    return merged_rows
 
 def get_documents_count() -> int:
     return db.events.count_documents({})
 
-def update_event_price(event_id: str, new_price: float) -> bool:
-    """Update the price of an event document by event_id. Returns True if updated, False if not found."""
-    result = db.events.update_one({"event_id": event_id}, {"$set": {"price": new_price}})
-    if result.modified_count > 0:
-        #print(f"Updated price for event ID: {event_id} to {new_price}")
-        return True
-    else:
-        #print(f"No event found with ID: {event_id} or price unchanged.")
-        return False
-    
-def update_event(event_id: str, **kwargs) -> bool:
-    """Updates specified fields for a given event_id using $set. Returns True if successful, False otherwise."""
-    # Ensure at least one field was passed to update
-    if not kwargs:
-        print("No fields provided for update.")
-        return False
-
-    # Execute update_one using $set with the kwargs dictionary
-    result = db.events.update_one(
-        filter={"event_id": event_id},
-        update={"$set": kwargs}
-    )
-
-    if result.modified_count > 0:
-        #print(f"Updated event {event_id}!")
-        return True
-    else:
-        #print(f"No event found with ID: {event_id} or field values unchanged.")
-        return False
-    
-def delete_event(event_id: str) -> bool:
-    """Delete one event document by event_id. Returns True if successful, False otherwise."""
-    result = db.events.delete_one({"event_id": event_id})
-    if result.deleted_count > 0:
-        #print(f"Deleted event with ID: {event_id}")
-        return True
-    else:
-        #print(f"No event found with ID: {event_id}")
-        return False
-
-def get_next_user_id() -> str:
-    """
-    Increments the counter and returns the formatted ID (e.g., 'USR002').
-    """
-    counter = db.counters_user.find_one_and_update(
-        filter={"_id": "user_id"},
-        update={"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    
-    seq_number = counter["seq"]
-    
-    # Format with prefix and 3-digit padding (e.g., 101 -> 'EVT101', 9 -> 'EVT009')
-    return f"USR{seq_number:03d}"
-
-def create_user(new_user: dict) -> str:
-    """Inserts one user document. Stores a hash of the email address instead of the raw value.""" 
-    u = {
-        "name":       new_user["name"],
-        "email":      pseudonymise(new_user["email"]),
-        "join_date":  new_user["join_date"],
-        "interests":  new_user["interests"],
-    }
-    u["user_id"] = get_next_user_id()
-
-    result = db.users.insert_one(u)
-    #print(f"Inserted user with ID: {u['user_id']}")
-    return str(result.inserted_id)
-
-def aggregate_events_by_category() -> list[dict]:
+# Recommended order: $match, $lookup, $unwind, $group
+def aggregate_citizen_complaints_by_category(filter_priority) -> list[dict]:
     """Analyzes the event documents using aggregation pipeline."""
-    pipeline = [
+    pipeline = []
+
+    # Only attach the $match stage if filter_priority is not "(all)"
+    if filter_priority != "(all)":
+        pipeline.append({
+            "$match": {
+                "priority": filter_priority
+            }
+        })
+
+    pipeline.extend([
         { "$group": {
             "_id": "$category",
-            "events_count": { "$sum": 1 },
-            "total_available_tickets": { "$sum": "$available_tickets" },
-            "avg_price": { "$avg": "$price" }
+            "complaints_count": { "$sum": 1 },
+            "earliest_date": { "$min": "$date_submitted" },
+            "latest_date": { "$max": "$date_submitted" }
         }},
-        { "$sort":  { "avg_price": -1 } },
+        { "$sort":  { "complaints_count": -1 } },
         { "$limit": 10 },
         {"$project": {
             "category": "$_id", # map _id back to category
-            "events_count": 1,
-            "total_available_tickets": 1,
-            "avg_price": 1,
+            "complaints_count": 1,
+            "earliest_date": 1,
+            "latest_date": 1,
             "_id": 0
         }}
-    ]
-    return list(db.events.aggregate(pipeline))
+    ])
+
+    return list(complaints_col.aggregate(pipeline))
+
+def get_weather_cursor() -> Cursor[dict[str, Any]]:
+    """Returns weather data for visual plot on frontend."""
+    weather_col = db["weather_data"]
+
+    # 2. Project only relevant traffic-weather fields
+    projection = {
+        "_id": 0,
+        "visibility_km": 1,
+        "precipitation_mm": 1,
+        "wind_speed_kmh": 1,
+        "temperature_celsius": 1,
+    }
+
+    # Fetch non-null documents
+    cursor = weather_col.find(
+        {"visibility_km": {"$exists": True, "$ne": None}}, 
+        projection
+    )
+
+    return cursor

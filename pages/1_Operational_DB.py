@@ -3,105 +3,130 @@
 from unittest import result
 
 import streamlit as st
-from db.utils_mongodb import create_event, read_events, update_event_price, delete_event
-from db.utils_mongodb import aggregate_events_by_category
+from db.utils_mongodb import get_days_with_this_weather, get_traffic_on_weather_days
+from db.utils_mongodb import aggregate_citizen_complaints_by_category
+from db.utils_mongodb import get_weather_cursor
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.set_page_config(page_title="Smart City · Operational DB", page_icon="🗄️", layout="wide")
 st.title("🗄️ Operational DB")
-st.caption(
-    "This page is backed by YOUR chosen third database. "
-    "Update the caption to say which one, and why, once you have decided."
+st.caption("MongoDB")
+
+st.header("POLITEMall dataset")
+# ===========================================================================
+# Aggregation pipeline with $group stage
+# ===========================================================================
+st.subheader("Aggregation by complaints category")
+
+filter_priority = st.selectbox(
+    "Match by priority",
+    ["(all)", "Low", "Medium", "High"],
 )
 
-# ===========================================================================
-# CREATE — input form
-# ===========================================================================
-st.subheader("Add an event record")
+rows = aggregate_citizen_complaints_by_category(filter_priority)
 
-with st.form("create_form", clear_on_submit=True):
-    category = st.selectbox(
-        "Category",
-        ["music", "food", "art", "workshop", "sports", "theatre"],
+if len(rows) > 0:
+    df = pd.DataFrame(rows)
+    column_order = ["category", "complaints_count", "earliest_date", "latest_date"]
+    df = df[column_order]
+    st.dataframe(df)
+
+st.divider()
+
+# ===========================================================================
+# Multipanel weather boxplot
+# ===========================================================================
+st.subheader("Weather data boxplot")
+
+cursor = get_weather_cursor()
+df = pd.DataFrame(list(cursor))
+
+# 3. Configure 2x2 Subplot Grid
+fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 10))
+sns.set_theme(style="whitegrid")
+
+# Define traffic-impacting features, colors, and axis titles
+features = [
+    ("visibility_km", "Visibility (km)", "#4C72B0", axes[0, 0]),
+    ("precipitation_mm", "Precipitation (mm)", "#55A868", axes[0, 1]),
+    ("wind_speed_kmh", "Wind Speed (km/h)", "#C44E52", axes[1, 0]),
+    ("temperature_celsius", "Temperature (°C)", "#8172B3", axes[1, 1])
+]
+
+# 4. Generate individual boxplots
+for col, label, color, ax in features:
+    sns.boxplot(
+        y=df[col],
+        ax=ax,
+        color=color,
+        width=0.4,
+        flierprops={"marker": "o", "markersize": 3, "alpha": 0.5},
+        notch=True  # Highlights median confidence interval
     )
-    title = st.text_input("Title")
-    event_date = st.date_input("Date")
-    event_time = st.time_input("Time", value=None)
-    price = st.number_input("Price ($)", min_value=0.0, step=0.01)
-    tickets = st.number_input("Available tickets", min_value=0, step=1)
-    description = st.text_area("Description", height=100)
-    venue_id = st.text_input("Venue ID")
-    organiser_id = st.text_input("Organiser ID")
-    tags = st.text_input("Tags (comma-separated)")
-    submitted = st.form_submit_button("Create")
+    ax.set_title(f"Distribution of {label}", fontsize=12, fontweight="bold")
+    ax.set_ylabel(label, fontsize=10)
+    ax.set_xlabel("")
 
-if submitted:
-    record = {
-        "title": title,
-        "category": category,
-        "date": str(event_date),
-        # format time as HH:MM string without seconds for storage
-        "time": str(event_time.strftime("%H:%M")),
-        "price": float(price),
-        "available_tickets": int(tickets),
-        "description": description,
-        "venue_id": venue_id,
-        "organiser_id": organiser_id,
-        "tags": [tag.strip() for tag in tags.split(",") if tag.strip()],
-    }
-    #st.json(record)  # shows what would be inserted; remove once implemented
-    new_id = create_event(record)
-    st.success(f"Created record {new_id}")
+plt.suptitle("Weather Conditions Affecting Road Traffic & Hazard Risks", fontsize=15, y=0.98)
+plt.tight_layout()
+# Render directly in Streamlit instead of plt.show()
+st.pyplot(fig)
 
 st.divider()
 
 # ===========================================================================
 # READ — results area with at least one filter
 # ===========================================================================
-st.subheader("Browse records")
+st.subheader("Search records")
+st.caption("Matching weather days and high-congestion traffic")
+
+year = st.radio("Pick a year:", ["2024", "2025"])
+st.write("You selected:", year)
 
 fcol1, fcol2 = st.columns(2)
 with fcol1:
-    filter_category = st.selectbox(
-        "Filter by category",
-        ["(all)", "music", "food", "art", "workshop", "sports", "theatre"],
-    )
+    wind_speed = st.slider("Select wind speed (km/h) >=", min_value=0, max_value=50, value=36)
+    temperature = st.slider("Select temperature (celsius) <=", min_value=-10, max_value=40, value=4)
 with fcol2:
-    max_price = st.number_input("Max price ($)", min_value=0.0, value=50.0, step=5.0)
+    precipitation = st.slider("Select precipitation (mm) >=", min_value=0, max_value=20, value=14)
+    visibility = st.slider("Select visibility (km) <=", min_value=2, max_value=20, value=6)
 
 if st.button("Search"):
-    rows = read_events(filter_category, float(max_price))
-    st.dataframe(rows)
+#    rows = get_days_with_this_weather(year=year, wind_speed=wind_speed, temperature=temperature, 
+#                                      precipitation=precipitation, visibility=visibility)
+#    if len(rows) > 0:
+#        df = pd.DataFrame(rows)
+#        column_order = ["recorded_at", "station_id", "visibility_km", 
+#                        "precipitation_mm", "wind_speed_kmh", "temperature_celsius"]
+#        df = df[column_order]
+#        st.dataframe(df.style.format({"recorded_at": lambda val: str(val)[:10], 
+#                                      "precipitation_mm": "{:.2f}",
+#                                      "temperature_celsius": "{:.1f}"}))
+
+    merged_rows = get_traffic_on_weather_days(year=year, wind_speed=wind_speed, temperature=temperature, 
+                                      precipitation=precipitation, visibility=visibility)
+    if len(merged_rows) > 0:
+        df_merged = pd.DataFrame(merged_rows)
+        st.dataframe(df_merged.style.format({"recorded_at": lambda val: str(val)[:10], 
+                                      "precipitation_mm": "{:.2f}",
+                                      "temperature_celsius": "{:.1f}"}))
 
 st.divider()
 
-# ===========================================================================
-# UPDATE / DELETE
-# ===========================================================================
-with st.expander("Update / Delete a record"):
-    record_id = st.text_input("Record ID")
-    ucol1, ucol2 = st.columns(2)
-    with ucol1:
-        new_price = st.number_input("New price ($)", min_value=0.0, step=1.0, key="upd_price")
-        if st.button("Update price"):
-            result = update_event_price(record_id, new_price)
-            if result:
-                st.success(f"Updated price for event ID: {record_id} to {new_price}")
-            else:
-                st.error(f"No event found with ID: {record_id} or price unchanged.")
-    with ucol2:
-        if st.button("Delete record", type="primary"):
-            result = delete_event(record_id)
-            if result:
-                st.success(f"Deleted event with ID: {record_id}")
-            else:
-                st.error(f"No event found with ID: {record_id}")
-
-st.divider()
-
-# ===========================================================================
-# Aggregation pipeline with $group stage
-# ===========================================================================
-st.subheader("Aggregation by event category")
-
-rows = aggregate_events_by_category()
+#st.header("CRUD operations")
+#st.caption("Akan datang!")
+## ===========================================================================
+## CREATE — input form
+## ===========================================================================
+#with st.expander("Add a record"):
+#    ...
+#
+## ===========================================================================
+## UPDATE / DELETE
+## ===========================================================================
+#with st.expander("Update / Delete a record"):
+#    ...
+#
+#st.divider()
