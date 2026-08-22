@@ -3,12 +3,15 @@
 from unittest import result
 
 import streamlit as st
-from db.utils_mongodb import get_traffic_on_weather_days, get_citizen_complaints
-from db.utils_mongodb import aggregate_citizen_complaints_by_category
-from db.utils_mongodb import get_weather_cursor
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from db.utils_mongodb import (
+    get_traffic_on_weather_days, 
+    get_weather_cursor,
+    get_citizen_complaints,
+    aggregate_citizen_complaints_by_category
+)
 
 st.set_page_config(page_title="Smart City · Operational DB", page_icon="🗄️", layout="wide")
 st.title("🗄️ Operational DB")
