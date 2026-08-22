@@ -27,3 +27,15 @@ db.createUser({
 
 // By default, MongoDB authentication is disabled. 
 // Edit /etc/mongod.conf and add "authorization: enabled" under security
+
+use admin
+
+db.updateUser(
+  "hfyee",
+  {
+    roles: [ 
+      { role: "dbOwner", db: "smartcity" }, 
+      { role: "dbOwner", db: "smartcity_us" }, 
+    ]
+  }
+)
