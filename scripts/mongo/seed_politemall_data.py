@@ -18,7 +18,7 @@ import json
 import pathlib
 import config
 from db.connections import get_mongo_client
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, UpdateOne
 from pymongo.errors import DuplicateKeyError, ConnectionFailure, OperationFailure
 from db.utils import pseudonymise
 
@@ -74,31 +74,83 @@ for c in citizen_complaints:
     }
     complaint_docs.append(doc)
 
-complaints_col.insert_many(complaint_docs)
-print(f"  Citizen complaint docs inserted: {complaints_col.count_documents({})}")
+#complaints_col.insert_many(complaint_docs)
+#print(f"  Citizen complaint docs inserted: {complaints_col.count_documents({})}")
+
+# Build bulk upsert operations using the unique compound key
+operations = [
+    UpdateOne(
+        filter={
+            "complaint_id": doc["complaint_id"]
+        },
+        update={"$set": doc},
+        upsert=True
+    )
+    for doc in complaint_docs
+]
+
+# Execute the bulk upsert
+# With ordered=False, MongoDB is free to reorder and execute the operations in parallel or in arbitrary batches
+if operations:
+    result = complaints_col.bulk_write(operations, ordered=False)
+    print(f"Upserted citizen complaint docs: {result.upserted_count}, Modified: {result.modified_count}, Matched: {result.matched_count}")
 
 # ── Collection: traffic sensors ──────────────────────────────────────────────────────────
 traffic_col = db["traffic_sensors"]
-traffic_col.create_index([("sensor_id", ASCENDING)])
-traffic_col.create_index([("timestamp", DESCENDING)])
+traffic_col.create_index([("timestamp", DESCENDING), ("sensor_id", ASCENDING)], unique=True)
 traffic_col.create_index([("weather_condition", ASCENDING)])
 complaints_col.create_index([("road_segment", ASCENDING), ("congestion_level", ASCENDING)])
 complaints_col.create_index([("vehicle_count", ASCENDING), ("avg_speed_kmh", ASCENDING)])
 
-traffic_col.insert_many(traffic_sensors)
-print(f"  Traffic sensor docs inserted: {traffic_col.count_documents({})}")
+#traffic_col.insert_many(traffic_sensors)
+#print(f"  Traffic sensor docs inserted: {traffic_col.count_documents({})}")
+
+# Build bulk upsert operations using the unique compound key
+operations = [
+    UpdateOne(
+        filter={
+            "timestamp": doc["timestamp"],
+            "sensor_id": doc["sensor_id"]
+        },
+        update={"$set": doc},
+        upsert=True
+    )
+    for doc in traffic_sensors
+]
+
+# Execute the bulk upsert
+if operations:
+    result = traffic_col.bulk_write(operations, ordered=False)
+    print(f"Upserted traffic sensor docs: {result.upserted_count}, Modified: {result.modified_count}, Matched: {result.matched_count}")
 
 # ── Collection: weather ───────────────────────────────────────────────────────
 weather_col = db["weather_data"]
-weather_col.create_index([("station_id", ASCENDING)])
-weather_col.create_index([("recorded_at", ASCENDING)])
+weather_col.create_index([("recorded_at", DESCENDING), ("station_id", ASCENDING)], unique=True)
 weather_col.create_index([("temperature_celsius", ASCENDING), ("humidity_percent", ASCENDING)])
 weather_col.create_index([("pressure_hpa", ASCENDING), ("wind_speed_kmh", ASCENDING)])
 weather_col.create_index([("precipitation_mm", ASCENDING), ("visibility_km", ASCENDING)])
-weather_col.create_index([("duplicate_flag", ASCENDING)])
 
-weather_col.insert_many(weather_data)
-print(f"  Weather sensor docs inserted: {weather_col.count_documents({})}")
+#weather_col.insert_many(weather_data)
+#print(f"  Weather sensor docs inserted: {weather_col.count_documents({})}")
+
+# Build bulk upsert operations using the unique compound key
+operations = [
+    UpdateOne(
+        filter={
+            "recorded_at": doc["recorded_at"],
+            "station_id": doc["station_id"]
+        },
+        update={"$set": doc},
+        upsert=True
+    )
+    for doc in weather_data
+]
+
+# Execute the bulk upsert
+if operations:
+    result = weather_col.bulk_write(operations, ordered=False)
+    print(f"Upserted weather sensor docs: {result.upserted_count}, Modified: {result.modified_count}, Matched: {result.matched_count}")
+
 
 # ── Smoke test — find any docs with missing or null id ────────────────────────
 print ("\nSmoke test - complaints missing a valid complaint_id.")
