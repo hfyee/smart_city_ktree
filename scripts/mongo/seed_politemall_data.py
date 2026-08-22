@@ -1,18 +1,10 @@
 """
 SmartCity — MongoDB Seed Script
 ================================
-Populates three MongoDB collections in the 'citybuzz' database:
-  - events
-  - users
-  - bookings
-
-Requirements:
-    pip install pymongo
-
-Usage:
-    python seed_mongodb.py
-
-Assumes MongoDB running locally on mongodb://localhost:27017 (default).
+Populates three MongoDB collections in the 'smartcity_us' database:
+  - citizen_complaints
+  - traffic_sensors
+  - weather_data
 """
 import json
 import pathlib
@@ -39,8 +31,8 @@ weather_data = load("smart_city_dataset_weather_data.json")
 # ── Connect ───────────────────────────────────────────────────────────────────
 try:
     client = get_mongo_client()
-    db = client[config.MONGO_DB]
-    print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
+    db = client[config.MONGO_DB_2]
+    print(f"Connected to MongoDB. Using database '{config.MONGO_DB_2}'.")
 except ConnectionFailure:
     print("Failed to connect to MongoDB server.")
 except OperationFailure as e:
