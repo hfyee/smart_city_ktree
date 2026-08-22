@@ -91,8 +91,8 @@ if operations:
 traffic_col = db["traffic_sensors"]
 traffic_col.create_index([("timestamp", DESCENDING), ("sensor_id", ASCENDING)], unique=True)
 traffic_col.create_index([("weather_condition", ASCENDING)])
-complaints_col.create_index([("road_segment", ASCENDING), ("congestion_level", ASCENDING)])
-complaints_col.create_index([("vehicle_count", ASCENDING), ("avg_speed_kmh", ASCENDING)])
+traffic_col.create_index([("road_segment", ASCENDING), ("congestion_level", ASCENDING)])
+traffic_col.create_index([("vehicle_count", ASCENDING), ("avg_speed_kmh", ASCENDING)])
 
 #traffic_col.insert_many(traffic_sensors)
 #print(f"  Traffic sensor docs inserted: {traffic_col.count_documents({})}")
