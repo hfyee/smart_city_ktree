@@ -20,19 +20,30 @@ import config
 @st.cache_resource
 def get_mongo_client():
     """Return a connected MongoDB client, or None on failure."""    
-    user = urllib.parse.quote_plus(config.MONGO_USER)
-    pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
-    
-    uri = (
-        f"mongodb://{user}:{pwd}@"
-        f"{config.MONGO_HOST}:{config.MONGO_PORT}/{config.MONGO_DB}?"
-        f"authSource={getattr(config, 'MONGO_AUTH_DB', 'admin')}"
-    )
-    
-    client = MongoClient(uri, serverSelectionTimeoutMS=3000)
-    # Force a network call to verify credentials and server reachability immediately
-    client.admin.command("ping")
-    return client
+    # Can't access /etc/mongod.conf on MongoDB in Docker on EC2 
+    #uri = config.MONGO_URI
+    #client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+    #client.admin.command("ping")
+    #return client
+
+    # RBAC
+    #user = urllib.parse.quote_plus(config.MONGO_USER)
+    #pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
+    user = st.session_state.get("mongo_user")
+    pwd = st.session_state.get("mongo_password")
+
+    if user and pwd:
+        uri = (
+            f"mongodb://{user}:{pwd}@"
+            f"{config.MONGO_HOST}:{config.MONGO_PORT}/{config.MONGO_DB}?"
+            f"authSource={getattr(config, 'MONGO_AUTH_DB', 'admin')}"
+        )  
+          
+        client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+        # Force a network call to verify credentials and server reachability immediately
+        client.admin.command("ping")
+
+        return client
 
 def get_mongo_db():
     """Return the citybuzz database handle, or None if not connected."""

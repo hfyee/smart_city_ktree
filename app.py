@@ -18,6 +18,11 @@ Project structure:
 
 import streamlit as st
 from PIL import Image
+from db.connections import get_mongo_client, get_neo4j_driver, get_chroma_collection
+
+# Initialize session state
+st.session_state["mongo_user"] = ""
+st.session_state["mongo_password"] = ""
 
 img = Image.open("pages/images/smart-city.png")
 
@@ -44,17 +49,24 @@ Use the sidebar to navigate:
 """
 )
 
+with st.sidebar:
+    with st.form("mongo_login_form", clear_on_submit=True):
+        mongo_user_input = st.text_input("MongoDB username")
+        mongo_password_input = st.text_input("MongoDB password", type="password")
+        submitted = st.form_submit_button("Enter")
+
 st.divider()
 st.subheader("Connection status")
 
-from db.connections import get_mongo_client, get_neo4j_driver, get_chroma_collection
-
 col1, col2, col3 = st.columns(3)
 with col1:
-    if get_mongo_client() is not None:
-        st.success("Operational DB — connected")
-    else:
-        st.error("Operational DB — not connected")
+    if submitted:
+        st.session_state["mongo_user"] = mongo_user_input
+        st.session_state["mongo_password"] = mongo_password_input
+        if get_mongo_client() is not None:
+            st.success("Operational DB — connected")
+        else:
+            st.error("Operational DB — not connected")
 with col2:
     if get_neo4j_driver() is not None:
         st.success("Neo4j — connected")

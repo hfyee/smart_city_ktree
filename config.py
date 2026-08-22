@@ -13,7 +13,7 @@ import json
 # -----------------------------------------------------------------------------
 NEO4J_URI      = "neo4j://localhost:7687"
 NEO4J_USERNAME = "neo4j"
-NEO4J_PASSWORD = "xxx"
+NEO4J_PASSWORD = "NYP_EDM-ITG202"
 
 # -----------------------------------------------------------------------------
 # ChromaDB
@@ -21,7 +21,7 @@ NEO4J_PASSWORD = "xxx"
 # the project folder. Change this if you want it stored elsewhere.
 # -----------------------------------------------------------------------------
 CHROMA_PATH       = "./chromadb_store"
-#CHROMA_COLLECTION = "citybuzz_events"
+CHROMA_COLLECTION = "smartcity_traffic_incidents"
 
 # -----------------------------------------------------------------------------
 # MongoDB
@@ -29,15 +29,6 @@ CHROMA_PATH       = "./chromadb_store"
 MONGO_URI = "mongodb://localhost:27017"
 MONGO_HOST = "localhost"
 MONGO_PORT = "27017"
+MONGO_DB_2  = "smartcity_us"
 MONGO_DB  = "smartcity"
 MONGO_AUTH_DB = "admin"
-# RBAC
-mongo_user_credentials = """[
-    {"username": "xxx", "password": "xxx"},
-    {"username": "yyy", "password": "yyy"},
-    {"username": "zzz", "password": "zzz"}
-]"""
-password_list = json.loads(mongo_user_credentials)
-password_lookup = {user["username"]: user["password"] for user in password_list}
-MONGO_USER = "xxx"
-MONGO_PASSWORD = password_lookup.get(MONGO_USER)
