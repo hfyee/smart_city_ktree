@@ -10,8 +10,8 @@ from db.utils import mask_name
 from pprint import pprint
 
 client = get_mongo_client()
-db = client[config.MONGO_DB] if client else None
-print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
+db = client[config.MONGO_DB_2] if client else None
+print(f"Connected to MongoDB. Using database '{config.MONGO_DB_2}'.")
 
 complaints_collection = db["citizen_complaints"]
 traffic_collection = db["traffic_sensors"]
