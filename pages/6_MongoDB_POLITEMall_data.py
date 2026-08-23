@@ -1,4 +1,4 @@
-"""Operational DB page — your third database (Task A1)."""
+"""Operational DB page — MongoDB"""
 
 from unittest import result
 

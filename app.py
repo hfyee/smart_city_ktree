@@ -60,7 +60,7 @@ st.subheader("Connection status")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    if submitted:
+    if True:
         st.session_state["mongo_user"] = mongo_user_input
         st.session_state["mongo_password"] = mongo_password_input
         if get_mongo_client() is not None:

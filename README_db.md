@@ -64,3 +64,15 @@ http://13.229.52.92:8502/
 sudo systemctl status mongod
 sudo systemctl restart mongod
 sudo systemctl enable mongod
+
+## MongoDB RBAC
+## Previously stored in config.py
+mongo_user_credentials = """[
+    {"username": "hfyee", "password": "9108122d"},
+    {"username": "tsteo", "password": "3897044t"},
+    {"username": "mkao", "password": "6667044q"}
+]"""
+password_list = json.loads(mongo_user_credentials)
+password_lookup = {user["username"]: user["password"] for user in password_list}
+MONGO_USER = "hfyee"
+MONGO_PASSWORD = password_lookup.get(MONGO_USER)

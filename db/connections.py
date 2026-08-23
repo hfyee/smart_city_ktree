@@ -27,10 +27,10 @@ def get_mongo_client():
     #return client
 
     # RBAC
-    #user = urllib.parse.quote_plus(config.MONGO_USER)
-    #pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
-    user = st.session_state.get("mongo_user")
-    pwd = st.session_state.get("mongo_password")
+    user = urllib.parse.quote_plus(config.MONGO_USER)
+    pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
+    #user = st.session_state.get("mongo_user")
+    #pwd = st.session_state.get("mongo_password")
 
     if user and pwd:
         uri = (
