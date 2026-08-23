@@ -36,6 +36,7 @@ db.updateUser(
     roles: [ 
       { role: "dbOwner", db: "smartcity" }, 
       { role: "dbOwner", db: "smartcity_us" }, 
+      { role: "root", db: "admin"}
     ]
   }
 )
