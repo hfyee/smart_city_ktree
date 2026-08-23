@@ -34,3 +34,6 @@ def mask_name(name: str) -> str:
     if not name or not isinstance(name, str):
         return name
     return re.sub(r'\b(\w)\w+', r'\1***', name)
+
+def mask_except_last_four(s):
+    return "*" * max(0, len(s) - 4) + s[-4:]
