@@ -149,7 +149,7 @@ def get_traffic_on_weather_days(year: str, wind_speed: float, temperature: float
 
 # Recommended order: $match, $lookup, $unwind, $group
 def aggregate_citizen_complaints_by_category(filter_priority) -> list[dict]:
-    """Analyzes the event documents using aggregation pipeline."""
+    """Analyzes the complaints documents using aggregation pipeline."""
     pipeline = []
 
     # Only attach the $match stage if filter_priority is not "(all)"
