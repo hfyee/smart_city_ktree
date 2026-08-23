@@ -1,16 +1,14 @@
 """
-Cross-DB write functions called by 'Add Event' page
-Assumes that the primary store is already seeded with venue and vendor data 
-NB. driver.execute_query() returns an EagerResult object, which does not have a .single() method
+Cross-DB write and audit functions called by 'Pipeline' page
+Based on template from HF's citybuzz project code
 """
 from unittest import result
 import json
 import pathlib
 import config
 from db.utils import load, pseudonymise
-from db.connections import get_mongo_client
+from db.connections import get_mongo_client, get_neo4j_driver
 from pymongo import ReturnDocument
-from db.connections import get_neo4j_driver
 import chromadb
 from chromadb.utils import embedding_functions
 import numpy as np
@@ -20,14 +18,14 @@ from sentence_transformers import SentenceTransformer
 mongo_client = get_mongo_client()
 db = mongo_client[config.MONGO_DB] if mongo_client else None
 print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
-mongo_events = db["events"]
+mongo_complaints = db["citizen_complaints"]
 
 # --- Store 2 (derived): ChromaDB, semantic layer --
 chroma_client = chromadb.PersistentClient(path="./chromadb_store")
 print("ChromaDB connected")
 
-chroma_events = chroma_client.get_or_create_collection(
-    name="citybuzz_events",
+chroma_complaints = chroma_client.get_or_create_collection(
+    name="citizen_complaints",
     configuration={"hnsw": {"space": "cosine"}}
 )
 print("ChromaDB collection ready")
@@ -43,12 +41,7 @@ print(f"Ready. Output dimensions: {model.get_sentence_embedding_dimension()}")
 
 # Lookup dictionaries for denormalisation
 # In a production system, they would be retrieved from separate db collections
-#venues = load("venues.json")
-#venues.extend(load("venues_new.json"))
-#organisers = load("organisers.json")
-#organisers.extend(load("organisers_new.json"))
-#venue_map = {v["venue_id"]: v for v in venues}
-#organiser_map = {o["organiser_id"]: o for o in organisers}
+
 
 def get_next_event_id() -> str:
     ...
@@ -88,11 +81,55 @@ def delete_event(event_id: str) -> str:
     ...
 
 # ---------------------------------------------------------------
-# Audit: compare the derived stores against the primary
+# Audit: compare the derived stores against the primary for citizen complaints
 # Detects and repairs any drift.
 # ---------------------------------------------------------------
 def reconcile() -> dict:
-    ...
+    """Audit both derived stores against the primary; repair any drift."""
+    mongo_ids  = {d["complaint_id"] for d in mongo_complaints.find({}, {"complaint_id": 1})}
+    chroma_ids = set(chroma_complaints.get(include=[])["ids"])
+    records, _, _ = neo4j_driver.execute_query("MATCH (c:Complaint) RETURN c.complaint_id AS id")
+    neo4j_ids  = {r["id"] for r in records}
+
+    report = {"checked": len(mongo_ids)}
+
+    # --- vector layer vs primary ---
+    print("Comparing vector layer vs primary...")
+    missing = mongo_ids - chroma_ids
+
+    if missing:
+        print("Found in primary, not in derived")
+        for eid in sorted(missing):
+            write_vector(mongo_complaints.find_one({"complaint_id": eid}))
+            report.setdefault("vector_repaired", []).append(eid)
+
+    orphans = chroma_ids - mongo_ids
+
+    if orphans:
+        print("Found in derived, not in primary")
+        chroma_complaints.delete(ids=list(orphans))
+        report["vector_orphans_removed"] = sorted(orphans)
+
+    # --- graph layer vs primary ---
+    print("Comparing graph layer vs primary...")
+    missing = mongo_ids - neo4j_ids
+
+    if missing:
+        print("Found in primary, not in derived")
+        for eid in sorted(missing):
+            write_graph(mongo_complaints.find_one({"complaint_id": eid}))
+            report.setdefault("graph_repaired", []).append(eid)
+
+    orphans = neo4j_ids - mongo_ids
+
+    if orphans:
+        print("Found in derived, not in primary")
+        for eid in sorted(orphans):
+            neo4j_driver.execute_query(
+                "MATCH (e:Complaint {complaint_id: $id}) DETACH DELETE e", id=eid)
+            report.setdefault("graph_orphans_removed", []).append(eid)
+
+    return report
 
 # ---------------------------------------------------------------
 # Read from all 3 layers 
