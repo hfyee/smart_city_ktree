@@ -1,7 +1,0 @@
-      "category": "",
-      "category": "Lighting",
-      "category": "Noise",
-      "category": "Parks",
-      "category": "Roads",
-      "category": "Traffic",
-      "category": "Trash",
