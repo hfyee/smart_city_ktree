@@ -18,33 +18,93 @@ client = get_mongo_client()
 db = client[config.MONGO_DB] if client else None
 print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
 complaints_col = db["citizen_complaints"]
-weather_col = db["weather_data"]
-traffic_col = db["traffic_sensors"]
+weather_col = db["weather_readings"]
+traffic_col = db["traffic_incidents"]
 
 # Build lookup dictionaries for denormalisation
-#venues     = load("venues.json")
-#organisers = load("organisers.json")
-#venue_map     = {v["venue_id"]: v for v in venues}
-#organiser_map = {o["organiser_id"]: o for o in organisers}
+
+# ── Aggregation ──────────────────────────────────────────────────────────
+# Recommended order: $match, $lookup, $unwind, $group
+def aggregate_citizen_complaints_by_category(year) -> list[dict]:
+    """Analyzes the complaints documents using aggregation pipeline."""
+    pipeline = []
+
+    pipeline.append({
+        "$match": {
+            "date_posted": {"$regex": f"^{year}"}
+        }
+    })
+
+    pipeline.extend([
+        { "$group": {
+            "_id": "$category",
+            "complaints_count": { "$sum": 1 },
+            "earliest_date": { "$min": "$date_posted" },
+            "latest_date": { "$max": "$date_posted" }
+        }},
+        { "$sort":  { "complaints_count": -1 } },
+        { "$limit": 10 },
+        {"$project": {
+            "category": "$_id", # map _id back to category
+            "complaints_count": 1,
+            "earliest_date": 1,
+            "latest_date": 1,
+            "_id": 0
+        }}
+    ])
+
+    return list(complaints_col.aggregate(pipeline))
+
+# Recommended order: $match, $lookup, $unwind, $group
+def aggregate_traffic_incidents_by_type(year: int) -> list[dict]:
+    """Analyzes the traffic incident documents using aggregation pipeline."""
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year + 1, 1, 1)
+    pipeline = []
+
+    pipeline.append({
+        "$match": {
+            "collection_time": {
+                "$gte": start_date,
+                "$lt": end_date
+            }
+        }
+    })
+
+    pipeline.extend([
+        { "$group": {
+            "_id": "$incident_type",
+            "incidents_count": { "$sum": 1 },
+            "collection_time": { "$max": "$collection_time" }
+        }},
+        { "$sort":  { "incidents_count": -1 } },
+        { "$limit": 10 },
+        {"$project": {
+            "incident_type": "$_id", # map _id back to incident_type
+            "incidents_count": 1,
+            "collection_time": 1,
+            "_id": 0
+        }}
+    ])
+
+    return list(traffic_col.aggregate(pipeline))
 
 # ── Read operations ───────────────────────────────────────────────────────
-def get_citizen_complaints(year: str, category: str, priority: str) -> list:
+def get_citizen_complaints(year: str, category: str) -> list:
     query = {}
     if category:
         query["category"] = category
-    if priority:
-        query["priority"] = priority
     if year:
-        query["date_submitted"] = {"$regex": f"^{year}"}
+        query["date_posted"] = {"$regex": f"^{year}"}
     
     complaint_projection = {
-        "date_submitted": 1, "complaint_text": 1, "area": 1, 
-        "status":1, "contact_info": 1, "_id": 0
+        "date_posted": 1, "complaint_text": 1, "location": 1, 
+        "user_name": 1, "_id": 0
     }
     result = list(
         complaints_col.find(query, complaint_projection)
-        .sort("date_submitted", -1)
-        .limit(500)
+        .sort("date_posted", -1)
+        .limit(200)
     )
 
     return result
@@ -147,56 +207,18 @@ def get_traffic_on_weather_days(year: str, wind_speed: float, temperature: float
 
     return merged_rows
 
-# Recommended order: $match, $lookup, $unwind, $group
-def aggregate_citizen_complaints_by_category(filter_priority) -> list[dict]:
-    """Analyzes the event documents using aggregation pipeline."""
-    pipeline = []
+def find_weather_near_traffic_incident():
+    incident_coords = [103.89022888218133, 1.400674358412916]
 
-    # Only attach the $match stage if filter_priority is not "(all)"
-    if filter_priority != "(all)":
-        pipeline.append({
-            "$match": {
-                "priority": filter_priority
+    nearby_rainfall = collection.find({
+        "weather_type": "rainfall",
+        "location": {
+            "$near": {
+                "$geometry": {
+                    "type": "Point",
+                    "coordinates": incident_coords
+                },
+                "$maxDistance": 3000  # meters
             }
-        })
-
-    pipeline.extend([
-        { "$group": {
-            "_id": "$category",
-            "complaints_count": { "$sum": 1 },
-            "earliest_date": { "$min": "$date_submitted" },
-            "latest_date": { "$max": "$date_submitted" }
-        }},
-        { "$sort":  { "complaints_count": -1 } },
-        { "$limit": 10 },
-        {"$project": {
-            "category": "$_id", # map _id back to category
-            "complaints_count": 1,
-            "earliest_date": 1,
-            "latest_date": 1,
-            "_id": 0
-        }}
-    ])
-
-    return list(complaints_col.aggregate(pipeline))
-
-def get_weather_cursor() -> Cursor[dict[str, Any]]:
-    """Returns weather data for visual plot on frontend."""
-    weather_col = db["weather_data"]
-
-    # 2. Project only relevant traffic-weather fields
-    projection = {
-        "_id": 0,
-        "visibility_km": 1,
-        "precipitation_mm": 1,
-        "wind_speed_kmh": 1,
-        "temperature_celsius": 1,
-    }
-
-    # Fetch non-null documents
-    cursor = weather_col.find(
-        {"visibility_km": {"$exists": True, "$ne": None}}, 
-        projection
-    )
-
-    return cursor
+        }
+    }).limit(5)

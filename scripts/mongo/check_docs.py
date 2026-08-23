@@ -14,8 +14,8 @@ db = client[config.MONGO_DB] if client else None
 print(f"Connected to MongoDB. Using database '{config.MONGO_DB}'.")
 
 complaints_collection = db["citizen_complaints"]
-traffic_collection = db["traffic_sensors"]
-weather_collection = db["weather_data"]
+traffic_collection = db["traffic_incidents"]
+weather_collection = db["weather_readings"]
 
 def get_complaint_by_id(event_id: str) -> list:
     """Reads events with optional filters. Returns a list of event documents."""
@@ -29,11 +29,21 @@ def get_last_complaint_id_wo_incr() -> str:
     return f"COMP_{seq_number:06d}"
 
 if __name__ == '__main__':
-    if False:
+    if True:
         print(f"Number of documents in complaints collection: {complaints_collection.count_documents({})}")
         print()
         print("Last document inserted:")
         cursor = complaints_collection.find({}).sort("complaint_id", DESCENDING).limit(1)
+        for document in cursor:
+            pprint(document)
+            print()
+        print()
+
+    if True:
+        print(f"Number of documents in traffic incidents collection: {traffic_collection.count_documents({})}")
+        print()
+        print("Last document inserted:")
+        cursor = traffic_collection.find({}).sort("collection_time", DESCENDING).limit(1)
         for document in cursor:
             pprint(document)
             print()
@@ -52,7 +62,7 @@ if __name__ == '__main__':
             print()
         print()
 
-    if True:
+    if False:
         sensor_id = "TRAFFIC_92"
         print(f"Checking {sensor_id} data")
         cursor = traffic_collection.find({
