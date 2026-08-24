@@ -17,7 +17,7 @@ st.set_page_config(page_title="Smart City · Operational DB", page_icon="🗄️
 st.title("🗄️ MongoDB")
 st.caption("Dataset from POLITEMall")
 
-st.header("Smart City - USA")
+st.header("A City in the USA")
 # ===========================================================================
 # Aggregation pipeline with $group stage
 # ===========================================================================
