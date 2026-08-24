@@ -30,7 +30,9 @@ def get_last_complaint_id_wo_incr() -> str:
 
 if __name__ == '__main__':
     if True:
-        print(f"Number of documents in complaints collection: {complaints_collection.count_documents({})}")
+        print(f"Number of documents in Reddit complaints collection: {complaints_collection.count_documents({})}")
+        print("\nVerify index creation:")
+        print(complaints_collection.index_information())
         print()
         print("Last document inserted:")
         cursor = complaints_collection.find({}).sort("complaint_id", DESCENDING).limit(1)
@@ -40,7 +42,9 @@ if __name__ == '__main__':
         print()
 
     if True:
-        print(f"Number of documents in traffic incidents collection: {traffic_collection.count_documents({})}")
+        print(f"Number of documents in LTA traffic incidents collection: {traffic_collection.count_documents({})}")
+        print("\nVerify index creation:")
+        print(traffic_collection.index_information())
         print()
         print("Last document inserted:")
         cursor = traffic_collection.find({}).sort("collection_time", DESCENDING).limit(1)
@@ -48,6 +52,23 @@ if __name__ == '__main__':
             pprint(document)
             print()
         print()
+
+    if True:
+        print(f"Number of documents in NEA weather readings collection: {weather_collection.count_documents({})}")
+        print("\nVerify index creation:")
+        print(weather_collection.index_information())
+        print()
+        print("Last document inserted:")
+        cursor = weather_collection.find({}).sort("collection_time", DESCENDING).limit(1)
+        for document in cursor:
+            pprint(document)
+            print()
+        print()
+
+    if False:
+        # Previously, Obstacle and 'Vehicle breakdown' types were dropped during bulk upsert
+        print("Checking for distinct incident types:")
+        print(traffic_collection.distinct("type"))
 
     if False:
         station_id = "WEATHER_9"

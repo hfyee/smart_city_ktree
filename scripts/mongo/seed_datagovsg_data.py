@@ -83,10 +83,13 @@ raw_traffic_incidents = load("lta_traffic_incidents_14hrs_15min.json")
 
 # Create indexes
 traffic_col = db["traffic_incidents"]
-traffic_col.create_index([("collection_time", DESCENDING)], unique=True)
+# single-field unique index on collection_time will cause Obstacle and 'Vehicle breakdown' records to be dropped!
+traffic_col.create_index([("collection_time", DESCENDING), ("message", ASCENDING)], unique=True)
+# Allows spatial queries on location alone, or combined with any other filters
+traffic_col.create_index([("location", "2dsphere")])
 traffic_col.create_index([
-    ("incident_type", ASCENDING), ("incident_location", "2dsphere"), 
-    ("incident_message", ASCENDING), ("collection_time", DESCENDING)
+    ("type", ASCENDING), ("location", "2dsphere"), 
+    ("message", ASCENDING), ("collection_time", DESCENDING)
 ])
 
 # Transform the nested array structure into flattened documents
@@ -101,13 +104,13 @@ for batch in raw_traffic_incidents:
         flattened_incidents.append({
             "collection_number": batch_num,
             "collection_time": parsed_time,
-            "incident_type": incident.get("Type"),
-            "incident_location": {
+            "type": incident.get("Type"),
+            "location": {
                 "type": "Point",
                 # GeoJSON is [lon, lat]
                 "coordinates": [incident.get("Longitude"), incident.get("Latitude")]
             },
-            "incident_message": incident.get("Message")
+            "message": incident.get("Message")
         })
 
 if flattened_incidents:
@@ -115,7 +118,8 @@ if flattened_incidents:
     operations = [
         UpdateOne(
             filter={
-                "collection_time": doc["collection_time"]
+                "collection_time": doc["collection_time"],
+                "message": doc["message"]
             },
             update={"$set": doc},
             upsert=True
@@ -138,9 +142,11 @@ weather_col = db["weather_readings"]
 weather_col.create_index([
     ("station_id", ASCENDING), ("weather_type", ASCENDING), 
     ("reading_timestamp", DESCENDING), ], unique=True)
+# Allows spatial queries on location alone, or combined with any other filters
+weather_col.create_index([("location", "2dsphere")])
 # Optimised for finding all sensor readings across the island by type and time
 weather_col.create_index([
-    ("weather_type", ASCENDING), ("weather_location", "2dsphere"),
+    ("weather_type", ASCENDING), ("location", "2dsphere"),
     ("reading_timestamp", DESCENDING)
 ])
 
@@ -161,9 +167,9 @@ with open("./data/nea_realtime_weather_readings_14hrs.jsonl", "r", encoding="utf
             "station_id": doc["station_id"],
             "station_name": doc["station_name"],
             "weather_type": doc["weather_type"],
-            "reading_value": doc["value"],
+            "value": doc["value"],
             "reading_timestamp": datetime.fromisoformat(doc["reading_timestamp"]),
-            "weather_location": {
+            "location": {
                 "type": "Point",
                 "coordinates": [float(doc["longitude"]), float(doc["latitude"])]
             }
