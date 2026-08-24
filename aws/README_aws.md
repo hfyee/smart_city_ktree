@@ -69,6 +69,20 @@ aws ec2 authorize-security-group-ingress \
     --protocol tcp \
     --port 22 \
     --cidr 116.89.98.172/32 \
+    119.234.49.184
+    --profile EDM_AWS_ROLE_01
+
+## home network: 116.89.98.172/32
+aws ec2 authorize-security-group-ingress \
+    --group-id sg-0a3d787e2e1df274c \
+    --protocol tcp \
+    --port 22 \
+    --cidr 116.89.98.172/32 \
+    --profile EDM_AWS_ROLE_01
+
+aws ec2 authorize-security-group-ingress \
+    --group-id sg-0a3d787e2e1df274c \
+    --ip-permissions 'IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=116.89.98.172/32},{CidrIp=119.234.49.184/32}]'
     --profile EDM_AWS_ROLE_01
 
 ## /32 means only that one public IP address
