@@ -36,7 +36,7 @@ except OperationFailure as e:
     print(f"Authentication or RBAC permission error: {e.details}")
 
 # ── Drop existing collections for a clean seed ───────────────────────────────
-for col in ["citizen_complaints", "traffic_incidents", "weather_readings", "water_sensors"]:
+for col in ["citizen_complaints", "traffic_incidents", "weather_readings"]:
     db[col].drop()
 print("  Existing collections dropped.")
 
