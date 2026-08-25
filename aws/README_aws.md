@@ -69,7 +69,7 @@ aws ec2 authorize-security-group-ingress \
     --group-id sg-0a3d787e2e1df274c \
     --protocol tcp \
     --port 22 \
-    --cidr 116.89.98.172/32 \
+    --cidr 119.234.52.155/32 \
     --profile EDM_AWS_ROLE_01
 
 aws ec2 authorize-security-group-ingress \
@@ -123,7 +123,7 @@ aws ec2 describe-images \
   --image-ids ami-0bda501dba2e3a0ba \
   --query 'Images[0].[Name,Description,PlatformDetails]' \
   --output table \
-	--profile EDM_AWS_ROLE_01
+  --profile EDM_AWS_ROLE_01
 
 # 4. Launch an instance into your subnet
 aws ec2 run-instances \
