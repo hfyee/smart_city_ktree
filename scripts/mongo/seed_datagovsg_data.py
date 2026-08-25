@@ -108,7 +108,7 @@ for batch in raw_traffic_incidents:
             "location": {
                 "type": "Point",
                 # GeoJSON is [lon, lat]
-                "coordinates": [incident.get("Longitude"), incident.get("Latitude")]
+                "coordinates": [float(incident.get("Longitude")), float(incident.get("Latitude"))]
             },
             "message": incident.get("Message")
         })
