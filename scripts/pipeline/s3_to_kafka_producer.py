@@ -8,9 +8,6 @@ import boto3
 from confluent_kafka import Producer
 from dotenv import load_dotenv
 
-# Optional: import S3_BUCKET if defined in config.py, else read from env
-import config
-
 load_dotenv()
 
 # AWS & S3 Config
