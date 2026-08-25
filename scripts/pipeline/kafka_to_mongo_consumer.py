@@ -8,19 +8,20 @@ from dotenv import load_dotenv
 from confluent_kafka import Consumer, KafkaException
 from pymongo import MongoClient, UpdateOne
 import config
+from db.connections import get_mongo_client
+import time
 
 load_dotenv()
 
 # MongoDB Setup (Native Local Instance)
-MONGO_URI = os.getenv(config.MONGO_URI, "mongodb://localhost:27017/")
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["smart_city"]
+client = get_mongo_client()
+db = client[config.MONGO_DB] if client else None
 
 # Dedicated Collections
 COLLECTIONS = {
     "smartcity-complaints": db["citizen_complaints"],
-    "smartcity-traffic": db["traffic_sensors"],
-    "smartcity-weather": db["weather_data"]
+    "smartcity-traffic": db["traffic_incidents"],
+    "smartcity-weather": db["weather_readings"]
 }
 
 # Kafka Consumer Setup
@@ -28,7 +29,7 @@ consumer_config = {
     'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
     'group.id': 'smartcity-etl-consumer-group',
     'auto.offset.reset': 'earliest',
-    'enable.auto.commit': False
+    'enable.auto.commit': True
 }
 consumer = Consumer(consumer_config)
 consumer.subscribe(list(COLLECTIONS.keys()))
@@ -37,43 +38,89 @@ consumer.subscribe(list(COLLECTIONS.keys()))
 
 def transform_complaint(record: dict) -> dict:
     return {
-        "_id": record.get("complaint_id"),
-        "category": record.get("category", "GENERAL").upper(),
-        "description": record.get("description", ""),
-        "status": record.get("status", "OPEN").upper(),
-        "neighborhood": record.get("neighborhood"),
-        "priority_score": int(record.get("priority_score", 1)),
-        "reported_at": record.get("timestamp"),
+        "complaint_id": record.get("complaint_id"),
+        "category": record.get("category"),
+        "complaint_text": record.get("complaint_text"),
+        "location": record.get("location"),
+        "user_name": record.get("user_name"),
+        "date_posted": record.get("date_posted"),
         "ingested_at": datetime.now(timezone.utc)
     }
 
 def transform_traffic(record: dict) -> dict:
-    return {
-        "_id": f"{record.get('sensor_id')}_{record.get('timestamp')}",
-        "sensor_id": record.get("sensor_id"),
-        "junction_name": record.get("junction_name"),
-        "vehicle_count": int(record.get("vehicle_count", 0)),
-        "avg_speed_kmh": float(record.get("avg_speed_kmh", 0.0)),
-        "congestion_level": record.get("congestion_level", "LOW"),
-        "recorded_at": record.get("timestamp"),
+    doc = {
+        "collection_number": record.get("collection_number"),
+        "collection_time": datetime.strptime(record.get("collection_time"), "%Y-%m-%d %H:%M:%S"),
+        "type": record.get("Type"), 
         "ingested_at": datetime.now(timezone.utc)
     }
 
+    loc_data = record.get("location") or {}
+
+    # Extract nested coordinates
+    lon = loc_data.get("longitude")
+    lat = loc_data.get("latitude")
+
+    # Only attach GeoJSON Point if both values are valid floats/ints
+    if lon is not None and lat is not None:
+        try:
+            doc["location"] = {
+                "type": "Point",
+                "coordinates": [float(lon), float(lat)]  # GeoJSON format: [lon, lat]
+            }
+        except (ValueError, TypeError):
+            pass # Leave location omitted if parsing fails
+
+    return doc
+
 def transform_weather(record: dict) -> dict:
-    return {
-        "_id": f"{record.get('station_id')}_{record.get('timestamp')}",
+    doc = {
         "station_id": record.get("station_id"),
-        "temperature_c": float(record.get("temperature_c", 0.0)),
-        "humidity_pct": float(record.get("humidity_pct", 0.0)),
-        "precipitation_mm": float(record.get("precipitation_mm", 0.0)),
-        "recorded_at": record.get("timestamp"),
+        "station_name": record.get("station_name"),
+        "weather_type": record.get("weather_type"),
+        "value": record.get("value"),
+        "reading_timestamp": datetime.fromisoformat(record.get("reading_timestamp")),
         "ingested_at": datetime.now(timezone.utc)
     }
+
+    loc_data = record.get("location") or {}
+
+    # Extract nested coordinates
+    lon = loc_data.get("longitude")
+    lat = loc_data.get("latitude")
+
+    # Only attach GeoJSON Point if both values are valid floats/ints
+    if lon is not None and lat is not None:
+        try:
+            doc["location"] = {
+                "type": "Point",
+                "coordinates": [float(lon), float(lat)]  # GeoJSON format: [lon, lat]
+            }
+        except (ValueError, TypeError):
+            pass # Leave location omitted if parsing fails
+
+    return doc
 
 TRANSFORMERS = {
     "smartcity-complaints": transform_complaint,
     "smartcity-traffic": transform_traffic,
     "smartcity-weather": transform_weather
+}
+
+# Define filter builders for each topic
+FILTER_BUILDERS = {
+    "smartcity-complaints": lambda doc: {
+        "complaint_id": doc.get("complaint_id")
+    },
+    "smartcity-traffic": lambda doc: {
+        "collection_time": doc.get("collection_time"),
+        "message": doc.get("message")
+    },
+    "smartcity-weather": lambda doc: {
+        "station_id": doc.get("station_id"),
+        "weather_type": doc.get("weather_type"),
+        "reading_timestamp": doc.get("reading_timestamp")
+    }
 }
 
 # --- ETL Pipeline Execution ---
@@ -90,13 +137,16 @@ def flush_batches(batches: dict):
     if flushed_any:
         consumer.commit()
 
-def run_etl(batch_threshold=200):
+def run_etl(batch_threshold=200, flush_interval_seconds=5.0):
     print("Smart City Consumer ETL running. Listening to topics...")
     batches = {topic: [] for topic in COLLECTIONS.keys()}
+    last_flush_time = time.time()
 
     try:
         while True:
             msg = consumer.poll(timeout=1.0)
+            current_time = time.time()
+
             if msg is None:
                 continue
             if msg.error():
@@ -105,21 +155,31 @@ def run_etl(batch_threshold=200):
             topic = msg.topic()
             payload = json.loads(msg.value().decode('utf-8'))
 
-            # Route to transformer and prepare upsert
+            # Route to transformer
             transformer = TRANSFORMERS.get(topic)
-            if transformer:
+            filter_builder = FILTER_BUILDERS.get(topic)
+
+            if transformer and filter_builder:
                 transformed_doc = transformer(payload)
+                query_filter = filter_builder(transformed_doc)
+
                 batches[topic].append(
                     UpdateOne(
-                        {"_id": transformed_doc["_id"]},
-                        {"$set": transformed_doc},
+                        filter=query_filter,
+                        update={"$set": transformed_doc},
                         upsert=True
                     )
                 )
 
-            # Flush when any individual batch exceeds threshold
-            if any(len(b) >= batch_threshold for b in batches.values()):
+            # Check Flush Condition 1: Size threshold exceeded
+            size_triggered = any(len(b) >= batch_threshold for b in batches.values())
+
+            # Check Flush Condition 2: Time interval exceeded (and there is buffered data)
+            time_triggered = (current_time - last_flush_time >= flush_interval_seconds) and any(len(b) > 0 for b in batches.values())
+
+            if size_triggered or time_triggered:
                 flush_batches(batches)
+                last_flush_time = current_time
 
     except KeyboardInterrupt:
         print("\nStopping ETL pipeline...")
