@@ -43,9 +43,6 @@ print(f"Ready. Output dimensions: {model.get_sentence_embedding_dimension()}")
 # In a production system, they would be retrieved from separate db collections
 
 
-def get_next_event_id() -> str:
-    ...
-
 # ── CRUD operations ────────────────────────────────────────────
 # ---------------------------------------------------------------
 # One writer per store
@@ -133,10 +130,56 @@ def reconcile() -> dict:
 
 # ---------------------------------------------------------------
 # Read from all 3 layers 
-# 1. ChromaDB (catalogue) — which events, how similar: ranked entry-point IDs.
+# 1. ChromaDB (catalogue) — which complaints, how similar: ranked entry-point IDs.
 # 2. MongoDB (warehouse) — the authoritative record for each hit. 
-# 3. Neo4j (map) — graph traversal for context per hit: what other events at the venue.
+# 3. Neo4j (map) — graph traversal for context per hit: what other complaints at the same locations.
 # ---------------------------------------------------------------
-def search_events(query_text: str, category: str, max_price: float, k: int = 3) -> list[dict]:
-    ...
-    
+def search_complaints(query_text: str, category: str, k: int = 3) -> list[dict]:
+    """Three-layer read journey: vector → operational → graph."""
+    # LAYER 1 — semantic entry points (vector store)
+    query_embedding = model.encode(query_text).tolist()
+    filters = []  
+    if category and category != "(all)":
+        filters.append({"category": {"$eq": category}})
+
+    # Construct the 'where' clause depending on how many filters are active
+    if len(filters) == 0:
+        where_clause = None
+    elif len(filters) == 1:
+        where_clause = filters[0]
+    else:
+        where_clause = {"$and": filters}
+
+    res = chroma_complaints.query(
+        query_embeddings=[query_embedding], 
+        where=where_clause,
+        n_results=k
+    )
+
+    hit_ids = res["ids"][0]
+    #print(f"ChromaDB: hit_ids: {hit_ids}")
+
+    # LAYER 2 — authoritative records (operational store), ranking preserved
+    docs = mongo_complaints.find({"complaint_id": {"$in": hit_ids}}, {"_id": 0})
+    by_id = {d["complaint_id"]: d for d in docs}
+    ordered = [by_id[i] for i in hit_ids if i in by_id]
+    #print(f"MongoDB: ordered_ids: {ordered}")
+
+    # LAYER 3 — graph context, one traversal per hit
+    # HF: below cypher sample from ITG202/CityBuzz
+    results = []
+    for ev in ordered:
+        records, _, _ = neo4j_driver.execute_query(
+            """
+            MATCH (e:Event {event_id: $event_id})-[:HELD_AT]->(v:Venue)
+            OPTIONAL MATCH (v)<-[:HELD_AT]-(other:Event)
+            WHERE other.event_id <> $event_id
+            RETURN v.name AS venue, collect(other.title)[..3] AS also_at_venue
+            """,
+            event_id=ev["event_id"],
+        )
+        ctx = records[0] if records else {"venue": None, "also_at_venue": []}
+        results.append({**ev, "venue_context": ctx["venue"],
+                        "also_at_venue": ctx["also_at_venue"]})
+    #print(f"Neo4j: no. of results: {len(results)}")
+    return results  
