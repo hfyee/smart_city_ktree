@@ -181,24 +181,37 @@ with tcol2:
 if st.button("Search", key="incident_search_button"):
     incidents = get_traffic_incidents(type=incident_type)
 
-    if len(incidents) > 0:
+    if incidents:
         df = pd.DataFrame(incidents)
 
-    # Extract coordinates out of the nested dictionary into distinct columns
-    df["longitude"] = df["location"].apply(lambda x: x["coordinates"][0] if isinstance(x, dict) else None)
-    df["latitude"] = df["location"].apply(lambda x: x["coordinates"][1] if isinstance(x, dict) else None)
-    
-    # Drop the raw nested dict column
-    df = df.drop(columns=["location"])
+        if "location" in df.columns:
+            df["longitude"] = df["location"].apply(
+                lambda x: x.get("coordinates", [None, None])[0] if isinstance(x, dict) else None
+            )
+            df["latitude"] = df["location"].apply(
+                lambda x: x.get("coordinates", [None, None])[1] if isinstance(x, dict) else None
+            )
+            # Safely drop location
+            df = df.drop(columns=["location"], errors="ignore")
+        else:
+            df["longitude"] = None
+            df["latitude"] = None
+            st.info("[Warning] No 'location' column in dataframe.")
 
-    column_order = ["collection_time", "longitude", "latitude", "message"]
-    df = df[column_order]
-    st.dataframe(
-        df.style.format({
-            "latitude": "{:.4f}",
-            "longitude": "{:.4f}"
-        })
-    )
+        # Filter/reorder only columns that actually exist
+        column_order = [col for col in ["collection_time", "longitude", "latitude", "message"] if col in df.columns]
+        df = df[column_order]
+
+        # Format numeric coordinates safely
+        format_dict = {}
+        if "latitude" in df.columns:
+            format_dict["latitude"] = lambda x: f"{x:.4f}" if pd.notnull(x) else "N/A"
+        if "longitude" in df.columns:
+            format_dict["longitude"] = lambda x: f"{x:.4f}" if pd.notnull(x) else "N/A"
+
+        st.dataframe(df.style.format(format_dict))
+    else:
+        st.info("No traffic incidents found for the selected type.")
 
     st.caption("Search rainfall within 3km of traffic incident")
 
