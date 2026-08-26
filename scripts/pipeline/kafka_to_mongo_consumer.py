@@ -47,31 +47,51 @@ def transform_complaint(record: dict) -> dict:
         "ingested_at": datetime.now(timezone.utc)
     }
 
-def transform_traffic(record: dict) -> dict:
-    doc = {
-        "collection_number": record.get("collection_number"),
-        "collection_time": datetime.strptime(record.get("collection_time"), "%Y-%m-%d %H:%M:%S"),
-        "type": record.get("Type"), 
-        "ingested_at": datetime.now(timezone.utc)
-    }
+def transform_traffic(record: dict) -> list[dict]:
+    """Flattens a batch envelope into individual incident documents with GeoJSON points."""
+    collection_num = record.get("collection_number")
+    
+    # Parse timestamp safely
+    raw_time = record.get("collection_time")
+    parsed_time = (
+        datetime.strptime(raw_time, "%Y-%m-%d %H:%M:%S")
+        if isinstance(raw_time, str)
+        else raw_time
+    )
+    
+    flattened_docs = []
+    incidents_list = record.get("traffic_incidents", [])
 
-    loc_data = record.get("location") or {}
+    # If the record is already an individual incident (fallback)
+    if not incidents_list and ("Type" in record or "type" in record):
+        incidents_list = [record]
 
-    # Extract nested coordinates
-    lon = loc_data.get("longitude")
-    lat = loc_data.get("latitude")
+    for incident in incidents_list:
+        doc = {
+            "collection_number": collection_num,
+            "collection_time": parsed_time,
+            "type": incident.get("Type"),
+            "message": incident.get("Message"),
+            "ingested_at": datetime.now(timezone.utc)
+        }
 
-    # Only attach GeoJSON Point if both values are valid floats/ints
-    if lon is not None and lat is not None:
-        try:
-            doc["location"] = {
-                "type": "Point",
-                "coordinates": [float(lon), float(lat)]  # GeoJSON format: [lon, lat]
-            }
-        except (ValueError, TypeError):
-            pass # Leave location omitted if parsing fails
+        lon = incident.get("Longitude") if incident.get("Longitude") is not None else incident.get("longitude")
+        lat = incident.get("Latitude") if incident.get("Latitude") is not None else incident.get("latitude")
 
-    return doc
+        if lon is not None and lat is not None:
+            try:
+                doc["location"] = {
+                    "type": "Point",
+                    "coordinates": [float(lon), float(lat)]  # GeoJSON: [lon, lat]
+                }
+            except (ValueError, TypeError) as e:
+                print(f"[ERROR] Failed to convert coordinates: lon={lon!r}, lat={lat!r} | Error: {e}")
+        else:
+            print(f"[WARNING] Missing coordinates in incident: {doc.get('message')}")
+
+        flattened_docs.append(doc)
+
+    return flattened_docs
 
 def transform_weather(record: dict) -> dict:
     doc = {
@@ -160,16 +180,20 @@ def run_etl(batch_threshold=200, flush_interval_seconds=5.0):
             filter_builder = FILTER_BUILDERS.get(topic)
 
             if transformer and filter_builder:
-                transformed_doc = transformer(payload)
-                query_filter = filter_builder(transformed_doc)
+                transformed_data = transformer(payload)
+                
+                # Normalize to a list to handle both single dicts and lists of dicts
+                docs_to_insert = transformed_data if isinstance(transformed_data, list) else [transformed_data]
 
-                batches[topic].append(
-                    UpdateOne(
-                        filter=query_filter,
-                        update={"$set": transformed_doc},
-                        upsert=True
+                for doc in docs_to_insert:
+                    query_filter = filter_builder(doc)
+                    batches[topic].append(
+                        UpdateOne(
+                            filter=query_filter,
+                            update={"$set": doc},
+                            upsert=True
+                        )
                     )
-                )
 
             # Check Flush Condition 1: Size threshold exceeded
             size_triggered = any(len(b) >= batch_threshold for b in batches.values())
