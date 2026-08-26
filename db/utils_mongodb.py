@@ -187,6 +187,8 @@ def enrich_incidents_with_weather(incidents: list[dict]) -> pd.DataFrame:
         lon, lat = coords[0], coords[1]
         
         # Query nearest weather reading
+        # Create the 2dsphere index on the weather_readings collection needed for $near query
+        weather_col.create_index([("location", "2dsphere")])
         weather_records = find_weather_near_traffic_incident(coords)
         
         # Format weather details if found
