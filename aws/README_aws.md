@@ -170,13 +170,18 @@ aws ec2 describe-internet-gateways \
     --output text
 
 ## big EC2 instance for pipeline
-ssh -i ./edm-group01-key.pem ec2-user@13.229.52.92
+ssh -i ./edm-group01-key.pem ec2-user@56.10.7.26 
 ## small instance for trial
 ssh -i ./edm-group01-key.pem ec2-user@47.128.150.107
 
 ## FTP
 tar -czvf archive.tar.gz smart_city_ktree/
-scp -i ./edm-group01-key.pem ../gitlab/copy_to_ec2/archive.tar.gz ec2-user@13.229.52.92:/home/ec2-user/
+scp -i ./edm-group01-key.pem ../db/utils_mongodb_2.py ec2-user@56.10.7.26:/home/ec2-user/smart_city_ktree_v3/temp
 tar -xzvf archive.tar.gz
 ## FTP from one EC2 instance to another
 scp -i ./edm-group01-key.pem kafka_pipeline.tar.gz ec2-user@47.128.150.107:/home/ec2-user/
+
+## Test your permission to create Amazon SQS queue
+aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::200810865757:role/lab-groups/EDM_AWS_ROLE_01 --action-names sqs:CreateQueue
+aws sqs create-queue --queue-name TestPermissionQueue --profile EDM_AWS_ROLE_01
+
