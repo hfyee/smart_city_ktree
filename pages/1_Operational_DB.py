@@ -15,6 +15,43 @@ from db.utils_mongodb import (
     enrich_incidents_with_weather
 )
 
+def plot_complaints_piechart(data: list[dict]):
+    """Renders a simplified Plotly pie chart directly in Streamlit."""
+    if not data:
+        st.warning("No complaint data to display.")
+        return
+
+    df = pd.DataFrame(data)
+    
+    fig = px.pie(
+        df,
+        names="category",
+        values="complaints_count",
+        title="Citizen Complaints by Category"
+    )
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+    
+    st.plotly_chart(fig, width='stretch')
+
+def plot_traffic_incidents_piechart(data: list[dict]):
+    """Renders a simplified Plotly pie chart directly in Streamlit."""
+    if not data:
+        st.warning("No traffic incidents data to display.")
+        return
+
+    df = pd.DataFrame(data)
+    
+    fig = px.pie(
+        df,
+        names="type",
+        values="incidents_count",
+        title="Traffic Incidents by Type"
+    )
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+
+    st.plotly_chart(fig, width='stretch')
+
+
 def plot_incidents_map(df: pd.DataFrame):
     """Renders an interactive map of incidents and nearby weather."""
     if df.empty:
@@ -41,7 +78,7 @@ def plot_incidents_map(df: pd.DataFrame):
     fig.update_traces(marker=dict(size=12, color="red"))
     fig.update_layout(margin=dict(r=0, t=40, l=0, b=0))
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
 
 st.set_page_config(page_title="Smart City · Operational DB", page_icon="🗄️", layout="wide")
@@ -62,12 +99,20 @@ with ycol2:
 
 rows = aggregate_citizen_complaints_by_category(str(year))
 
-if len(rows) > 0:
-    df = pd.DataFrame(rows)
-    column_order = ["category", "complaints_count", "earliest_date", "latest_date"]
-    df = df[column_order]
-    st.dataframe(df)
+aggccol1, aggccol2 = st.columns(2)
 
+with aggccol1:
+    if len(rows) > 0:
+        df = pd.DataFrame(rows)
+        column_order = ["category", "complaints_count", "earliest_date", "latest_date"]
+        df = df[column_order]
+        # vertical offset to align with the piechart
+        st.markdown('<div style="margin-top: 75px;"></div>', unsafe_allow_html=True)
+        st.dataframe(df)
+
+with aggccol2:
+    plot_complaints_piechart(rows)
+    
 # ===========================================================================
 # READ — results area with at least one filter
 # ===========================================================================
@@ -105,11 +150,19 @@ st.subheader("Aggregation of traffic incidents by type")
 
 rows = aggregate_traffic_incidents_by_type(year=2026)
 
-if len(rows) > 0:
-    df = pd.DataFrame(rows)
-    column_order = ["collection_time", "type", "incidents_count"]
-    df = df[column_order]
-    st.dataframe(df)
+aggtcol1, aggtcol2 = st.columns(2)
+
+with aggtcol1:
+    if len(rows) > 0:
+        df = pd.DataFrame(rows)
+        column_order = ["collection_time", "type", "incidents_count"]
+        df = df[column_order]
+        # vertical offset to align with the piechart
+        st.markdown('<div style="margin-top: 75px;"></div>', unsafe_allow_html=True)
+        st.dataframe(df)
+
+with aggtcol2:
+    plot_traffic_incidents_piechart(rows)
 
 # ===========================================================================
 # READ — results area with at least one filter
@@ -147,7 +200,7 @@ if st.button("Search", key="incident_search_button"):
         })
     )
 
-    st.caption("Search rainfall within 3km of a traffic incident")
+    st.caption("Search rainfall within 3km of traffic incident")
 
     df_map = enrich_incidents_with_weather(incidents)
     # As incident collection_time are only 15 mins apart, keep only the latest record per unique location/message
