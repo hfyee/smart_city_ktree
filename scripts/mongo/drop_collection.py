@@ -15,6 +15,6 @@ if __name__ == '__main__':
     print(collections)
 
     input("Warning: All collections will be deleted! Press Enter to continue ...")
-    for col in ["citizen_complaints", "traffic_sensors", "weather_data"]:
+    for col in ["citizen_complaints", "traffic_incidents", "weather_readings"]:
         db[col].drop()
     print("Existing collections dropped.")
