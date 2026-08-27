@@ -43,7 +43,7 @@ print("  Existing collections dropped.")
 
 # ── Collection: citizen complaints ─────────────────────────────────────────────────────────
 print("\nBuilding new Reddit citizen complaints collection...")
-raw_citizen_complaints = load("singapore_citizen_complaints_2015_2025.json")
+raw_citizen_complaints = load("singapore_citizen_complaints_2015_2025_v2.json")
 
 # Create indexes
 complaints_col = db["citizen_complaints"]
