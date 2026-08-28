@@ -14,6 +14,7 @@ from db.utils_mongodb import (
     get_traffic_incidents,
     enrich_incidents_with_weather
 )
+from db.utils_chromadb import semantic_search_traffic
 
 def plot_complaints_piechart(data: list[dict]):
     """Renders a simplified Plotly pie chart directly in Streamlit."""
@@ -83,7 +84,7 @@ def plot_incidents_map(df: pd.DataFrame):
 
 st.set_page_config(page_title="Smart City · Operational DB", page_icon="🗄️", layout="wide")
 st.title("🗄️ MongoDB")
-st.caption("Dataset from data.gov.sg & Reddit")
+st.caption("Datasets from data.gov.sg & Reddit")
 
 st.header("Singapore context")
 # ===========================================================================
@@ -222,19 +223,36 @@ if st.button("Search", key="incident_search_button"):
 )
     plot_incidents_map(df_map)
 
-#st.divider()
-#st.header("CRUD operations")
-#st.caption("Akan datang!")
-## ===========================================================================
-## CREATE — input form
-## ===========================================================================
-#with st.expander("Add a record"):
-#    ...
-#
-## ===========================================================================
-## UPDATE / DELETE
-## ===========================================================================
-#with st.expander("Update / Delete a record"):
-#    ...
-#
-#st.divider()
+st.divider()
+
+# ===========================================================================
+# Hybrid Search
+# ===========================================================================
+st.subheader("Hybrid Search for traffic incidents")
+
+st.caption("Ask about the current traffic situation — in your own words.")
+
+query_text = st.text_input(
+    "Search",
+    placeholder="why is traffic slow on the PIE?",
+    label_visibility="collapsed",
+)
+
+k = st.slider("Number of results", min_value=1, max_value=10, value=3)
+
+if st.button("Search", key="hybrid_search_button") and query_text:
+    with st.container(border=True):
+        for i, (meta, dist, doc) in enumerate(semantic_search_traffic(query_text, incident_type, k), start=0):
+            # Use .get() method with default value in case of any missing key
+            type = meta.get('type', 'Uncategorized')
+            latitude = meta.get('latitude', '')
+            longitude = meta.get('longitude', '')
+            description = doc
+
+            st.subheader(type)
+            st.caption(description)
+            st.metric("Lat", f"{latitude:.4f}")
+            st.metric("Lon", f"{longitude:.4f}")            
+            st.metric("Distance", f"{dist:.4f}")
+            st.divider()
+
