@@ -12,6 +12,9 @@ import sys
 import os
 import urllib.parse
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Make config.py importable from the project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -27,10 +30,12 @@ def get_mongo_client():
     #return client
 
     # RBAC
-    user = urllib.parse.quote_plus(config.MONGO_USER)
-    pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
+    #user = urllib.parse.quote_plus(config.MONGO_USER)
+    #pwd = urllib.parse.quote_plus(config.MONGO_PASSWORD)
     #user = st.session_state.get("mongo_user")
     #pwd = st.session_state.get("mongo_password")
+    user = os.getenv("MONGO_USERNAME")
+    pwd = os.getenv("MONGO_PASSWORD")
 
     if user and pwd:
         uri = (
@@ -58,7 +63,8 @@ def get_neo4j_driver():
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver(
             config.NEO4J_URI,
-            auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD)
+            #auth=(config.NEO4J_USERNAME, config.NEO4J_PASSWORD)
+            auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD"))
         )
         driver.verify_connectivity()
         return driver
