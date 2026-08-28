@@ -23,6 +23,7 @@ traffic_col = db["traffic_incidents"]
 
 # Build lookup dictionaries for denormalisation
 
+
 # ── Aggregation ──────────────────────────────────────────────────────────
 # Recommended order: $match, $lookup, $unwind, $group
 def aggregate_citizen_complaints_by_category(year) -> list[dict]:
@@ -178,6 +179,7 @@ def find_weather_near_traffic_incident(incident_coords: list[float],
 def enrich_incidents_with_weather(incidents: list[dict]) -> pd.DataFrame:
     """Pairs each incident with its nearest weather observation."""
     plot_data = []
+    columns = ["collection_time", "latitude", "longitude", "message", "nearby_weather"]
 
     for inc in incidents:
         # Extract [lon, lat] from the nested dictionary
@@ -205,5 +207,9 @@ def enrich_incidents_with_weather(incidents: list[dict]) -> pd.DataFrame:
             "message": inc.get("message"),
             "nearby_weather": weather_desc
         })
+
+    # Return empty DataFrame with predefined columns if no records matched
+    if not plot_data:
+        return pd.DataFrame(columns=columns)
 
     return pd.DataFrame(plot_data)
