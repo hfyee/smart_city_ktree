@@ -199,6 +199,13 @@ if st.button("Search", key="incident_search_button"):
             df["latitude"] = None
             st.info("[Warning] No 'location' column in dataframe.")
 
+        # Keep only the row with the latest collection_time for each unique combination of lon, lat, and message
+        df = (
+            df.sort_values("collection_time", ascending=False)
+            .drop_duplicates(subset=["longitude", "latitude", "message"], keep="first")
+            .reset_index(drop=True)
+        )
+
         # Filter/reorder only columns that actually exist
         column_order = [col for col in ["collection_time", "longitude", "latitude", "message"] if col in df.columns]
         df = df[column_order]
