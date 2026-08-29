@@ -89,7 +89,7 @@ if operations:
 
 # ── Collection: traffic sensors ──────────────────────────────────────────────────────────
 traffic_col = db["traffic_sensors"]
-traffic_col.create_index([("timestamp", DESCENDING), ("sensor_id", ASCENDING)], unique=True)
+traffic_col.create_index([("sensor_id", ASCENDING), ("timestamp", DESCENDING)], unique=True)
 traffic_col.create_index([("weather_condition", ASCENDING)])
 traffic_col.create_index([("road_segment", ASCENDING), ("congestion_level", ASCENDING)])
 traffic_col.create_index([("vehicle_count", ASCENDING), ("avg_speed_kmh", ASCENDING)])
@@ -117,7 +117,7 @@ if operations:
 
 # ── Collection: weather ───────────────────────────────────────────────────────
 weather_col = db["weather_data"]
-weather_col.create_index([("recorded_at", DESCENDING), ("station_id", ASCENDING)], unique=True)
+weather_col.create_index([("station_id", ASCENDING), ("recorded_at", DESCENDING)], unique=True)
 weather_col.create_index([("temperature_celsius", ASCENDING), ("humidity_percent", ASCENDING)])
 weather_col.create_index([("pressure_hpa", ASCENDING), ("wind_speed_kmh", ASCENDING)])
 weather_col.create_index([("precipitation_mm", ASCENDING), ("visibility_km", ASCENDING)])
