@@ -10,7 +10,6 @@ smart_city_ktree
 |   |-utils_mongodb.py
 |   |-utils_chromadb.py
 |   |-utils_neo4j.py
-|
 |-scripts
 |   |-mongodb
 |   |-chromadb
@@ -20,7 +19,6 @@ smart_city_ktree
 |       |-consumer_mongodb.py
 |       |-consumer_chromadb.py
 |       |-consumer_neo4j.py
-|
 |-pages
 |   |-1_Operational_DB.py
 |   |-2_Graph_Explorer.py
