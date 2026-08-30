@@ -2,7 +2,7 @@
 Coursework for NYP PDC in Enterprise Data Management
 
 ```
-File structure
+smart_city_ktree
 |-app.py
 |-config.py
 |-db
