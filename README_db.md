@@ -9,7 +9,7 @@ sudo yum install -y mongodb-org
 mongod --version
 db version v8.0.29
 
-## The EC2 instance comes with DBs running in separate Docker containers!
+## The EC2 instance comes with DBs running in separate Docker containers
 sudo docker ps --filter publish=27017
 sudo docker inspect mongodb
 sudo docker inspect mongodb --format '{{json .Config.Env}}'
@@ -36,7 +36,6 @@ Install latest release: sudo apt-get install neo4j=1:2026.07.1
 (Version in your ITG202: 1:2026.06.0)
 Check: apt list --installed | grep neo4j
 
-## The EC2 instance comes with DBs running in separate Docker containers!
 sudo docker inspect 935feb8e2cee
 sudo docker inspect 935feb8e2cee \
   --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'
@@ -53,19 +52,10 @@ Current stable release: 1.5.9
 pip install chromadb=1.5.9
 Check: pip show chromadb
 
-## The EC2 instance comes with DBs running in separate Docker containers!
 python -c "import chromadb; print(chromadb.__version__)"
 (Result: 1.5.9)
 
-# Access Streamlit app from your PC's browser using the EC2 public IP and port
-http://13.229.52.92:8502/
-
-## systemctl
-sudo systemctl status mongod
-sudo systemctl restart mongod
-sudo systemctl enable mongod
-
-## MongoDB RBAC
+## MongoDB RBAC (local installation)
 ## Previously stored in config.py
 mongo_user_credentials = """[
     {"username": "hfyee", "password": "9108122d"},
